@@ -33,29 +33,48 @@ button, input, select, textarea { font: inherit; color: inherit; }
   radial-gradient(900px 500px at 8% -10%, rgba(29, 143, 209, .14), transparent 60%),
   radial-gradient(800px 520px at 105% 10%, rgba(233, 30, 99, .12), transparent 60%),
   radial-gradient(700px 500px at 50% 120%, rgba(29, 143, 209, .10), transparent 60%), var(--bg); }
-.bg-art img { position: absolute; right: -6vmax; bottom: -8vmax; width: 62vmax; max-width: 900px; opacity: .07; filter: grayscale(.2); transform: rotate(-8deg); animation: floaty 18s ease-in-out infinite alternate; }
-.bg-art .ring { position: absolute; border-radius: 50%; border: 1px solid rgba(29, 143, 209, .14); }
-.bg-art .r1 { width: 520px; height: 520px; left: -160px; top: 30%; }
-.bg-art .r2 { width: 300px; height: 300px; left: 12%; top: 8%; border-color: rgba(233, 30, 99, .12); }
-@keyframes floaty { from { transform: rotate(-8deg) translateY(0); } to { transform: rotate(-4deg) translateY(-24px); } }
-@media (prefers-reduced-motion: reduce) { .bg-art img { animation: none; } }
+/* মাঝখানে লোগো ওয়াটারমার্ক + রঙিন আলো */
+.bg-art img { position: absolute; left: 50%; top: 56%; width: min(64vmin, 620px); transform: translate(-50%, -50%); opacity: .085; filter: saturate(1.2); animation: floaty 16s ease-in-out infinite alternate; }
+.bg-art .glow { position: absolute; left: 50%; top: 56%; width: min(110vmin, 1100px); aspect-ratio: 1; transform: translate(-50%, -50%); border-radius: 50%;
+  background: conic-gradient(from 210deg, rgba(233, 30, 99, .22), rgba(124, 58, 237, .18), rgba(29, 143, 209, .22), rgba(16, 185, 129, .14), rgba(245, 158, 11, .16), rgba(233, 30, 99, .22));
+  filter: blur(70px); opacity: .75; animation: spin 40s linear infinite; }
+.bg-art .ring { position: absolute; left: 50%; top: 56%; border-radius: 50%; transform: translate(-50%, -50%); border: 1.5px solid rgba(29, 143, 209, .16); }
+.bg-art .r1 { width: min(80vmin, 760px); height: min(80vmin, 760px); }
+.bg-art .r2 { width: min(98vmin, 940px); height: min(98vmin, 940px); border-color: rgba(233, 30, 99, .13); border-style: dashed; animation: spin 90s linear infinite reverse; }
+@keyframes floaty { from { transform: translate(-50%, -50%) scale(1); } to { transform: translate(-50%, -53%) scale(1.03); } }
+@keyframes spin { to { transform: translate(-50%, -50%) rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .bg-art img, .bg-art .glow, .bg-art .r2 { animation: none; } }
 
-/* top bar */
-.top { position: sticky; top: 0; z-index: 20; background: var(--glass); backdrop-filter: saturate(1.4) blur(14px); -webkit-backdrop-filter: saturate(1.4) blur(14px); border-bottom: 1px solid var(--line); }
-.top .in { max-width: 1180px; margin: 0 auto; padding: 0 16px; height: 64px; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.logo { display: flex; align-items: center; gap: 10px; color: var(--ink); text-decoration: none; min-width: 0; }
-.logo .mk { width: 42px; height: 42px; border-radius: 12px; background: #fff; border: 1px solid var(--line); display: flex; align-items: center; justify-content: center; flex: none; overflow: hidden; box-shadow: 0 2px 8px rgba(15, 23, 42, .06); }
+/* top bar — অ্যাপগুলোর মতো একই গোলাপি রং */
+.top { position: sticky; top: 0; z-index: 20; background: linear-gradient(90deg, #e91e63, #db2777 55%, #c2185b); color: #fff; box-shadow: 0 4px 18px rgba(219, 39, 119, .28); }
+.top .in { max-width: 1180px; margin: 0 auto; padding: 0 16px; height: 62px; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.logo { display: flex; align-items: center; gap: 10px; color: #fff; text-decoration: none; min-width: 0; }
+.logo .mk { width: 42px; height: 42px; border-radius: 12px; background: #fff; border: 2px solid rgba(255, 255, 255, .7); display: flex; align-items: center; justify-content: center; flex: none; overflow: hidden; box-shadow: 0 4px 12px rgba(0, 0, 0, .12); }
 .logo .mk img { width: 100%; height: 100%; object-fit: contain; padding: 2px; }
-.logo b { display: block; font-size: 16px; line-height: 1.15; white-space: nowrap; font-weight: 800; letter-spacing: -.2px; }
-.logo small { display: block; font-size: 11.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.logo b { display: block; font-size: 16.5px; line-height: 1.15; white-space: nowrap; font-weight: 800; letter-spacing: -.2px; }
+.logo small { display: block; font-size: 11.5px; color: rgba(255, 255, 255, .85); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .top .act { display: flex; align-items: center; gap: 8px; }
-.top .scs-gear { border-color: var(--line); background: var(--card); color: var(--ink); }
-.top .scs-gear:hover { background: var(--soft); }
 .chip { display: inline-flex; align-items: center; gap: 6px; padding: 8px 12px; border-radius: 12px; background: var(--card); border: 1px solid var(--line); color: var(--ink); font-size: 12.5px; font-weight: 700; text-decoration: none; cursor: pointer; white-space: nowrap; }
 .chip:hover { background: var(--soft); }
+.top .chip { background: rgba(255, 255, 255, .16); border-color: rgba(255, 255, 255, .3); color: #fff; }
+.top .chip:hover { background: rgba(255, 255, 255, .26); }
 .seg { display: inline-flex; background: var(--soft); border: 1px solid var(--line); border-radius: 12px; padding: 3px; }
 .seg button { border: 0; background: none; border-radius: 9px; padding: 5px 10px; font-size: 12px; font-weight: 700; color: var(--muted); cursor: pointer; }
 .seg button.on { background: var(--card); color: var(--brand); box-shadow: 0 1px 3px rgba(0, 0, 0, .08); }
+.top .seg { background: rgba(255, 255, 255, .16); border-color: rgba(255, 255, 255, .3); }
+.top .seg button { color: rgba(255, 255, 255, .85); }
+.top .seg button.on { background: #fff; color: var(--brand); }
+
+/* হোম পেজের রঙিন স্বাগত ব্যানার */
+.hero-band { position: relative; overflow: hidden; border-radius: 22px; padding: 22px 22px; margin-bottom: 20px; color: #fff;
+  background: linear-gradient(120deg, #e91e63 0%, #9c27b0 45%, #1d8fd1 100%); box-shadow: 0 18px 40px rgba(156, 39, 176, .25); }
+.hero-band::before { content: ""; position: absolute; right: -60px; top: -80px; width: 260px; height: 260px; border-radius: 50%; background: rgba(255, 255, 255, .12); }
+.hero-band::after { content: ""; position: absolute; right: 90px; bottom: -110px; width: 220px; height: 220px; border-radius: 50%; background: rgba(255, 255, 255, .08); }
+.hero-band .welcome { margin: 0; position: relative; z-index: 1; }
+.hero-band .h1 { color: #fff; font-size: 26px; }
+.hero-band .small { color: rgba(255, 255, 255, .85); }
+.hero-band .stats { display: flex; gap: 10px; flex-wrap: wrap; position: relative; z-index: 1; margin-top: 14px; }
+.hero-band .stats span { background: rgba(255, 255, 255, .16); border: 1px solid rgba(255, 255, 255, .25); padding: 6px 12px; border-radius: 99px; font-size: 12.5px; font-weight: 700; backdrop-filter: blur(4px); }
 
 .wrap { max-width: 1180px; margin: 0 auto; padding: 26px 16px 70px; }
 .h1 { font-size: 24px; font-weight: 800; margin: 0 0 4px; letter-spacing: -.3px; }

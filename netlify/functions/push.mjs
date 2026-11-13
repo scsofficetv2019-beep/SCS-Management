@@ -11,22 +11,29 @@
  * ===================================================================== */
 import crypto from 'node:crypto';
 
-const URL_ = (process.env.SUPABASE_URL || '').replace(/\/$/, '');
-const ANON = process.env.SUPABASE_ANON_KEY || '';
-const SERVICE = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+const URL_ = (process.env.SUPABASE_URL || '').trim().replace(/\/+$/, '');
+const ANON = (process.env.SUPABASE_ANON_KEY || '').trim();
+const SERVICE = (process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim();
+const isJwt = (k) => /^eyJ/.test(k);
+function keyHelp(msg) {
+  return /unregistered api key|invalid api key|no api key/i.test(msg)
+    ? 'Supabase key ভুল (' + msg + ')। Netlify Environment variables এ SUPABASE_URL / SUPABASE_ANON_KEY / SUPABASE_SERVICE_ROLE_KEY একই প্রজেক্টের কি না দেখে আবার বসান, তারপর Trigger deploy দিন।'
+    : msg;
+}
 
 const json = (status, body) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 const b64u = (buf) => Buffer.from(buf).toString('base64url');
 const unb64u = (s) => Buffer.from(String(s), 'base64url');
 
 async function rest(path, { token, method = 'GET', body, prefer } = {}) {
-  const key = token ? ANON : SERVICE;
-  const headers = { apikey: key, Authorization: 'Bearer ' + (token || SERVICE), 'Content-Type': 'application/json' };
+  const headers = { 'Content-Type': 'application/json' };
+  if (token) { headers.apikey = ANON; headers.Authorization = 'Bearer ' + token; }
+  else { headers.apikey = SERVICE; if (isJwt(SERVICE)) headers.Authorization = 'Bearer ' + SERVICE; }
   if (prefer) headers.Prefer = prefer;
   const r = await fetch(URL_ + path, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
   const t = await r.text();
   let j = null; try { j = t ? JSON.parse(t) : null; } catch { j = t; }
-  if (!r.ok) throw new Error((j && (j.message || j.error_description || j.msg)) || ('Supabase error ' + r.status));
+  if (!r.ok) throw new Error(keyHelp(String((j && (j.message || j.error_description || j.msg)) || ('Supabase error ' + r.status))));
   return j;
 }
 

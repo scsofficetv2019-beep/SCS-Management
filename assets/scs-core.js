@@ -309,7 +309,9 @@
       '.scs-pin .er{color:#dc2626;font-size:12.5px;min-height:18px;margin-top:6px}' +
       '.scs-pin .bt{display:flex;gap:8px;margin-top:8px}.scs-pin .bt button{flex:1;border:0;border-radius:12px;padding:11px;font-weight:700;cursor:pointer}' +
       '.scs-pin .bt .c{background:#f3f4f6;color:#111827}.scs-pin .bt .o{background:#e91e63;color:#fff}' +
-      '.scs-fab{position:fixed;right:12px;top:12px;z-index:2147483000}.scs-fab .scs-gear{background:#111827;border-color:#111827;box-shadow:0 8px 24px rgba(0,0,0,.25)}' +
+      '.scs-fab{position:fixed;right:12px;top:12px;z-index:2147483000;display:flex;gap:6px}.scs-fab .scs-gear{background:#111827;border-color:#111827;box-shadow:0 8px 24px rgba(0,0,0,.25)}' +
+      'a.scs-gear{text-decoration:none}' +
+      '@media (max-width:480px){header .scs-gear{width:32px;height:32px;border-radius:10px}header .scs-gear svg{width:17px;height:17px}}' +
       '.scs-hd-logo{width:100%;height:100%;object-fit:contain;border-radius:inherit;background:#fff;padding:2px}' +
       '@media print{.scs-gear,.scs-menu,.scs-sheet,.scs-fab,.scs-toast{display:none!important}}';
     document.head.appendChild(css);
@@ -608,6 +610,18 @@
     return btn;
   };
 
+  /** টপ বারের হোম বাটন — SCS Management হোম পেজ (অন্য অ্যাপে যাওয়ার জন্য) */
+  SCS.makeHome = function (dark) {
+    injectCss();
+    var a = document.createElement('a');
+    a.href = '/';
+    a.className = 'scs-ui scs-gear' + (dark ? ' dark' : '');
+    a.setAttribute('data-scs-home', '1');
+    a.title = T('SCS Management home — switch apps', 'SCS Management হোম — অন্য অ্যাপে যান');
+    a.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h5v-6h4v6h5V9.5"/></svg>';
+    return a;
+  };
+
   /** নোটিফিকেশন চালু করা (লোড, লাইভ, পুশ ডিসপ্যাচ) */
   SCS.startNotifications = function () {
     if (!SCS.me || !SCS.me.active) return;
@@ -653,7 +667,7 @@
         if (++tries > 40 && !fab) {   // হেডার না পেলে ভাসমান বাটন
           fab = document.createElement('div'); fab.className = 'scs-ui scs-fab';
           gear = SCS.makeGear({ appKey: appKey, appName: appInfo.name, role: role, onAdmin: opts.onAdmin });
-          fab.appendChild(gear); document.body.appendChild(fab);
+          fab.appendChild(SCS.makeHome(false)); fab.appendChild(gear); document.body.appendChild(fab);
         }
         return;
       }
@@ -663,6 +677,7 @@
       if (fab) { fab.remove(); fab = null; }
       gear = SCS.makeGear({ appKey: appKey, appName: appInfo.name, role: role, dark: !!opts.darkGear, onAdmin: opts.onAdmin });
       slot.insertBefore(gear, slot.firstChild);
+      slot.insertBefore(SCS.makeHome(!!opts.darkGear), gear);
     }
     var mo = new MutationObserver(function () { clearTimeout(mo._t); mo._t = setTimeout(ensure, 60); });
     mo.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['class', 'src'] });

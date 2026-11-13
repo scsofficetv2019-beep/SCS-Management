@@ -12,7 +12,7 @@
 <link rel="stylesheet" href="/assets/portal.css" />
 </head>
 <body>
-<div class="bg-art" aria-hidden="true"><img data-scs-logo alt="" /></div>
+<div class="bg-art" aria-hidden="true"><span class="glow"></span><span class="ring r1"></span><span class="ring r2"></span><img data-scs-logo alt="" /></div>
 <header class="top">
   <div class="in">
     <a class="logo" href="/"><span class="mk"><img data-scs-logo alt="SCS" /></span><span><b data-i="My Profile|আমার প্রোফাইল"></b><small>SCS Management</small></span></a>
@@ -72,7 +72,7 @@
         '</div>' +
         '<div class="row2">' +
           '<div class="field"><label class="l">' + T('Email', 'ইমেইল') + '</label><input class="in-f" readonly value="' + esc(me.email) + '" /></div>' +
-          '<div class="field"><label class="l">' + T('Employee ID', 'এমপ্লয়ি আইডি') + '</label><input class="in-f" readonly value="' + esc(p.employee_id || T('Given by admin after approval', 'অনুমোদনের পর অ্যাডমিন দেবেন')) + '" /></div>' +
+          '<div class="field"><label class="l">' + T('Employee ID', 'এমপ্লয়ি আইডি') + '</label><input class="in-f" id="pEmp" maxlength="40" value="' + esc(p.employee_id || '') + '" placeholder="' + T('Your company employee ID (optional)', 'কোম্পানির এমপ্লয়ি আইডি (ঐচ্ছিক)') + '" /></div>' +
         '</div>' +
         ((p.designation || p.department) ? '<div class="row2"><div class="field"><label class="l">' + T('Designation', 'পদবি') + '</label><input class="in-f" readonly value="' + esc(p.designation) + '" /></div><div class="field"><label class="l">' + T('Department', 'বিভাগ') + '</label><input class="in-f" readonly value="' + esc(p.department) + '" /></div></div>' : '') +
         '<p class="small" style="margin:0 0 14px">' + T('Your name and photo are shown in Employee Attendance and all other SCS apps.', 'এই নাম ও ছবিই Employee Attendance সহ সব SCS অ্যাপে দেখাবে।') + '</p>' +
@@ -196,12 +196,16 @@
     if (!/^(\+?88)?01[3-9]\d{8}$/.test(phone)) { toast(T('Enter a valid mobile number', 'সঠিক মোবাইল নম্বর দিন')); return; }
     if (!(st.photo || st.me.profile.photo_url)) { toast(T('Upload your photo', 'আপনার ছবি আপলোড করুন')); return; }
     $('save').disabled = true;
-    SCS.q(sb.from('profiles').update({ full_name: name, phone: phone }).eq('id', st.me.id)).then(function () {
+    var emp = $('pEmp').value.trim();
+    var upd = { full_name: name, phone: phone };
+    if (emp !== (st.me.profile.employee_id || '')) upd.employee_id = emp || null;
+    SCS.q(sb.from('profiles').update(upd).eq('id', st.me.id).select('id')).then(function (rows) {
+      if (!rows || !rows.length) throw new Error(T('Not saved — please try again.', 'সেভ হয়নি — আবার চেষ্টা করুন।'));
       toast(T('Profile saved', 'প্রোফাইল সেভ হয়েছে'));
       var wasIncomplete = !st.me.complete;
       if (wasIncomplete) { setTimeout(function () { location.href = next || '/'; }, 700); return; }
       return load();
-    }).catch(function (er) { toast(SCS.err(er)); }).then(function () { var b = $('save'); if (b) b.disabled = false; });
+    }).catch(function (er) { toast(/duplicate|unique/i.test(SCS.err(er)) ? T('This Employee ID is already used by someone else.', 'এই Employee ID অন্য কারো আছে।') : SCS.err(er)); }).then(function () { var b = $('save'); if (b) b.disabled = false; });
   }
   function savePass() {
     var a = $('np1').value, b = $('np2').value;

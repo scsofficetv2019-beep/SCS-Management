@@ -165,6 +165,8 @@ declare
   v_old jsonb; v_new jsonb; v_changed text[]; v_ref text;
   v_uid uuid := auth.uid(); v_email text; v_name text;
 begin
+  -- ব্যাকআপ রিস্টোরের সময় লগ লেখা হয় না (পুরনো লগ ব্যাকআপ থেকেই আসে)
+  if current_setting('scs.restoring', true) = '1' then return coalesce(new, old); end if;
   if tg_op in ('UPDATE','DELETE') then v_old := to_jsonb(old); end if;
   if tg_op in ('INSERT','UPDATE') then v_new := to_jsonb(new); end if;
 
@@ -199,6 +201,7 @@ end $$;
 create or replace function public.stamp_row() returns trigger
 language plpgsql as $$
 begin
+  if current_setting('scs.restoring', true) = '1' then return new; end if;
   if tg_op = 'INSERT' then
     new.created_at := coalesce(new.created_at, now());
     new.created_by := coalesce(auth.uid(), new.created_by);
@@ -558,7 +561,7 @@ begin
       new.approved_by := old.approved_by;
       new.approved_at := old.approved_at;
       new.email := old.email;
-      new.employee_id := old.employee_id;
+      -- Employee ID নিজে বদলাতে পারে (ইউনিক হতে হবে); অ্যাডমিনও যে কারোটা বদলাতে পারেন
       new.designation := old.designation;
       new.department := old.department;
       new.is_employee := old.is_employee;
@@ -580,6 +583,7 @@ create or replace function public.sync_employee_from_profile() returns trigger
 language plpgsql security definer set search_path = public as $$
 declare e record; v_name text;
 begin
+  if current_setting('scs.restoring', true) = '1' then return null; end if;
   v_name := coalesce(nullif(trim(new.full_name), ''), new.email);
   select * into e from public.att_employees where user_id = new.id;
   if not (new.status = 'active' and new.is_employee) then
@@ -610,6 +614,10 @@ begin
     department  = case when new.department  <> '' then new.department  else department  end,
     active = true, user_id = new.id
   where id = e.id;
+  return null;
+exception when others then
+  -- এমপ্লয়ি সিঙ্কে সমস্যা হলেও অ্যাকাউন্ট অনুমোদন/সেভ আটকাবে না
+  raise warning 'SCS employee sync skipped for %: %', new.email, sqlerrm;
   return null;
 end $$;
 
@@ -746,8 +754,11 @@ revoke execute on function public.scs_notify(text, text, text, text, uuid) from 
 create or replace function public.notify_new_account() returns trigger
 language plpgsql security definer set search_path = public as $$
 begin
+  if current_setting('scs.restoring', true) = '1' then return null; end if;
   perform public.scs_notify('core', 'New account waiting for approval',
-    coalesce(nullif(new.full_name, ''), new.email) || ' · ' || new.email, '/admin.html', new.id);
+    coalesce(nullif(new.full_name, ''), new.email) || ' · ' || coalesce(nullif(new.phone, ''), new.email), '/admin.html', new.id);
+  return null;
+exception when others then
   return null;
 end $$;
 drop trigger if exists zz_notify_new_account on public.profiles;
@@ -865,13 +876,192 @@ create policy scs_prof_files_delete on storage.objects for delete to authenticat
 update public.profiles set is_employee = is_employee where status = 'active';
 
 -- =====================================================================
---  9. প্রথম সুপার অ্যাডমিন বানানো (একবারই)
+--  9. v3: SMS কোড টেবিল, Google Drive ব্যাকআপ (pg_cron + pg_net), রিস্টোর, স্কিমা ভার্সন
+-- =====================================================================
+
+-- ---------- মোবাইল SMS কোড (অ্যাকাউন্ট খোলা / লগইন / রিসেট) — শুধু Netlify function পড়ে ----------
+create table if not exists public.sms_codes (
+  phone        text not null,
+  purpose      text not null check (purpose in ('signup','login','reset')),
+  code_hash    text not null,
+  expires_at   timestamptz not null,
+  attempts     int not null default 0,
+  sent_count   int not null default 1,
+  window_start timestamptz not null default now(),
+  created_at   timestamptz not null default now(),
+  primary key (phone, purpose)
+);
+alter table public.sms_codes enable row level security;   -- কোনো পলিসি নেই = ব্রাউজার থেকে কেউ পড়তে পারে না
+
+-- ---------- ব্যাকআপের জন্য extension (Supabase ফ্রি প্ল্যানেও আছে) ----------
+do $$
+begin
+  begin create extension if not exists pg_cron with schema pg_catalog; exception when others then raise notice 'pg_cron: %', sqlerrm; end;
+  begin create extension if not exists pg_net with schema extensions; exception when others then raise notice 'pg_net: %', sqlerrm; end;
+end $$;
+
+create table if not exists public.sys_backup_log (
+  id         bigint generated always as identity primary key,
+  at         timestamptz not null default now(),
+  request_id bigint,
+  filename   text,
+  manual     boolean not null default false,
+  error      text
+);
+alter table public.sys_backup_log enable row level security;
+create policy scs_bkl_read on public.sys_backup_log for select to authenticated using (public.is_super_admin());
+
+-- ব্যাকআপে যেসব টেবিল যায় না (গোপন বা অস্থায়ী)
+create or replace function public.scs_backup_excluded() returns text[]
+language sql immutable as $$
+  select array['sys_secrets','chem_secrets','password_reset_codes','sms_codes','push_subscriptions','notifications','sys_backup_log'];
+$$;
+
+-- পুরো ডাটাবেসের লাইফটাইম ব্যাকআপ (JSON) — ভবিষ্যতের নতুন অ্যাপের টেবিলও নিজে থেকে আসে
+create or replace function public.scs_backup_snapshot() returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare r record; v jsonb; tbls jsonb := '{}'::jsonb; cnt jsonb := '{}'::jsonb;
+begin
+  if auth.uid() is not null and not public.is_super_admin() then raise exception 'Super Admin access required'; end if;
+  for r in select tablename from pg_tables where schemaname = 'public' and tablename <> all (public.scs_backup_excluded()) order by tablename loop
+    execute format('select coalesce(jsonb_agg(to_jsonb(t)), ''[]''::jsonb) from public.%I t', r.tablename) into v;
+    tbls := tbls || jsonb_build_object(r.tablename, v);
+    cnt := cnt || jsonb_build_object(r.tablename, jsonb_array_length(v));
+  end loop;
+  return jsonb_build_object('format', 'scs-management-backup', 'version', 1, 'created_at', now(),
+    'note', 'Restore: SCS Management > Admin Console > Backup > Restore from file. Storage files (photos, PDFs) are not inside this file.',
+    'counts', cnt, 'tables', tbls);
+end $$;
+revoke execute on function public.scs_backup_snapshot() from public, anon;
+
+-- Google Drive (Apps Script Web App) এ ব্যাকআপ পাঠানো
+create or replace function public.scs_backup_run(p_manual boolean default false) returns jsonb
+language plpgsql security definer set search_path = public, extensions as $$
+declare cfg jsonb; url text; fname text; rid bigint;
+begin
+  if auth.uid() is not null and not public.is_super_admin() then raise exception 'Super Admin access required'; end if;
+  select value into cfg from public.sys_settings where key = 'backup';
+  url := coalesce(cfg ->> 'scriptUrl', '');
+  if url = '' then raise exception 'Google Drive backup is not set up (Admin Console > Backup)'; end if;
+  fname := 'SCS-backup-' || to_char(now() at time zone 'Asia/Dhaka', 'YYYY-MM-DD_HH24-MI-SS') || '.json';
+  begin
+    select net.http_post(
+      url := url,
+      body := jsonb_build_object('token', coalesce(cfg ->> 'token', ''), 'folderId', coalesce(cfg ->> 'folderId', ''),
+                                 'filename', fname, 'keep', coalesce(nullif(cfg ->> 'keep', '')::int, 0),
+                                 'data', public.scs_backup_snapshot()),
+      headers := '{"Content-Type": "application/json"}'::jsonb,
+      timeout_milliseconds := 120000) into rid;
+  exception when others then
+    insert into public.sys_backup_log (filename, manual, error) values (fname, p_manual, sqlerrm);
+    raise exception 'Backup could not be sent: % (is the pg_net extension enabled? Supabase > Database > Extensions)', sqlerrm;
+  end;
+  insert into public.sys_backup_log (request_id, filename, manual) values (rid, fname, p_manual);
+  delete from public.sys_backup_log where id < (select max(id) - 300 from public.sys_backup_log);
+  return jsonb_build_object('request_id', rid, 'filename', fname);
+end $$;
+revoke execute on function public.scs_backup_run(boolean) from public, anon;
+
+-- কতক্ষণ পরপর অটো ব্যাকআপ: off | 1m | 5m | 15m | 30m | 1h | 6h | 12h | 1d | 1w
+create or replace function public.scs_backup_schedule(p_interval text) returns text
+language plpgsql security definer set search_path = public as $$
+declare expr text;
+begin
+  if not public.is_super_admin() then raise exception 'Super Admin access required'; end if;
+  expr := case p_interval
+    when '1m' then '* * * * *'      when '5m' then '*/5 * * * *'   when '15m' then '*/15 * * * *'
+    when '30m' then '*/30 * * * *'  when '1h' then '0 * * * *'     when '6h' then '0 */6 * * *'
+    when '12h' then '0 */12 * * *'  when '1d' then '0 21 * * *'    -- প্রতিদিন রাত ৩টা (ঢাকা)
+    when '1w' then '0 21 * * 4'     -- প্রতি শুক্রবার রাত ৩টা (ঢাকা)
+    else null end;
+  begin perform cron.unschedule('scs-backup'); exception when others then null; end;
+  if expr is not null then
+    begin
+      perform cron.schedule('scs-backup', expr, 'select public.scs_backup_run(false)');
+    exception when others then
+      raise exception 'Auto backup could not be scheduled: % (enable pg_cron: Supabase > Database > Extensions)', sqlerrm;
+    end;
+  end if;
+  return coalesce(expr, 'off');
+end $$;
+
+-- শেষ কয়েকটা ব্যাকআপের অবস্থা (Google Drive কী উত্তর দিল)
+create or replace function public.scs_backup_status() returns jsonb
+language plpgsql security definer set search_path = public, extensions as $$
+declare res jsonb; job jsonb := null;
+begin
+  if not public.is_super_admin() then raise exception 'Super Admin access required'; end if;
+  begin
+    select jsonb_build_object('schedule', schedule, 'active', active) into job from cron.job where jobname = 'scs-backup';
+  exception when others then job := jsonb_build_object('error', sqlerrm); end;
+  begin
+    select coalesce(jsonb_agg(x order by x.id desc), '[]'::jsonb) into res from (
+      select l.id, l.at, l.filename, l.manual, l.error, r.status_code, left(r.content, 300) as response, r.error_msg, r.timed_out
+      from public.sys_backup_log l left join net._http_response r on r.id = l.request_id
+      order by l.id desc limit 15) x;
+  exception when others then
+    select coalesce(jsonb_agg(x order by x.id desc), '[]'::jsonb) into res from (
+      select id, at, filename, manual, error from public.sys_backup_log order by id desc limit 15) x;
+  end;
+  return jsonb_build_object('job', job, 'runs', res);
+end $$;
+
+-- ব্যাকআপ ফাইল থেকে রিস্টোর: যা নেই শুধু সেগুলো যোগ হয় (আগের ডাটা মুছে না)
+create or replace function public.scs_backup_restore(p jsonb) returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare t text; rws jsonb; n int; res jsonb := '{}'::jsonb;
+  first_tables text[] := array['audit_log','apps','profiles','app_access','app_pins'];
+begin
+  if not public.is_super_admin() then raise exception 'Super Admin access required'; end if;
+  if coalesce(p ->> 'format', '') <> 'scs-management-backup' then raise exception 'This is not an SCS Management backup file'; end if;
+  perform set_config('scs.restoring', '1', true);
+  for t in
+    select x from (
+      select u.x, u.o from unnest(first_tables) with ordinality as u(x, o)
+      union all
+      select k, 100 from jsonb_object_keys(p -> 'tables') k where k <> all (first_tables)
+    ) s order by s.o, s.x
+  loop
+    rws := p -> 'tables' -> t;
+    continue when rws is null or jsonb_typeof(rws) <> 'array' or jsonb_array_length(rws) = 0;
+    if t = any (public.scs_backup_excluded()) then continue; end if;
+    if not exists (select 1 from pg_tables where schemaname = 'public' and tablename = t) then
+      res := res || jsonb_build_object(t, 'skipped: table not in this database'); continue;
+    end if;
+    begin
+      if t = 'profiles' then   -- লগইন অ্যাকাউন্ট (auth.users) না থাকলে প্রোফাইল আনা যায় না
+        select coalesce(jsonb_agg(r), '[]'::jsonb) into rws from jsonb_array_elements(rws) r
+         where exists (select 1 from auth.users u where u.id = (r ->> 'id')::uuid);
+      elsif t in ('app_access', 'profile_documents') then
+        select coalesce(jsonb_agg(r), '[]'::jsonb) into rws from jsonb_array_elements(rws) r
+         where exists (select 1 from public.profiles pr where pr.id = (r ->> 'user_id')::uuid);
+      end if;
+      execute format('insert into public.%I overriding system value select * from jsonb_populate_recordset(null::public.%I, $1) on conflict do nothing', t, t) using rws;
+      get diagnostics n = row_count;
+      res := res || jsonb_build_object(t, n);
+      if t = 'audit_log' then
+        perform setval(pg_get_serial_sequence('public.audit_log', 'id'), greatest((select max(id) from public.audit_log), 1));
+      end if;
+    exception when others then
+      res := res || jsonb_build_object(t, 'error: ' || sqlerrm);
+    end;
+  end loop;
+  perform set_config('scs.restoring', '0', true);
+  return res;
+end $$;
+
+-- ডাটাবেস কোন ভার্সনে আছে (Admin Console মিলিয়ে দেখে)
+create or replace function public.scs_schema_version() returns int
+language sql immutable as $$ select 3; $$;
+
+-- =====================================================================
+--  10. প্রথম সুপার অ্যাডমিন বানানো (একবারই)
 --  প্রথমে ওয়েবসাইটে নিজের ইমেইল দিয়ে Sign up করুন, তারপর নিচের লাইনে
 --  ইমেইল বদলে শুধু এই লাইনটি Run করুন:
 --
 --  (লাইনের শুরুতে -- থাকলে সেটা চলে না — New query তে -- ছাড়া পেস্ট করুন)
 --
 --  insert into public.profiles (id, email, status, is_super_admin)
---  select id, email, 'active', true from auth.users where lower(email) = lower('scssouravmridha@gmail.com')
+--  select id, email, 'active', true from auth.users where lower(email) = lower('your-email@example.com')
 --  on conflict (id) do update set status = 'active', is_super_admin = true;
 -- =====================================================================
