@@ -622,6 +622,19 @@
     return a;
   };
 
+  /** টপ বারের Recent activity বাটন — ক্লিক করলে অ্যাক্টিভিটি লগ খোলে */
+  SCS.makeActivityBtn = function (appKey, dark) {
+    injectCss();
+    var b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'scs-ui scs-gear' + (dark ? ' dark' : '');
+    b.setAttribute('data-scs-activity', '1');
+    b.title = T('Recent activity', 'সাম্প্রতিক অ্যাক্টিভিটি');
+    b.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v4h4"/><path d="M12 7v5l3 2"/></svg>';
+    b.addEventListener('click', function (e) { e.stopPropagation(); SCS.openActivity(appKey || ''); });
+    return b;
+  };
+
   /** নোটিফিকেশন চালু করা (লোড, লাইভ, পুশ ডিসপ্যাচ) */
   SCS.startNotifications = function () {
     if (!SCS.me || !SCS.me.active) return;
@@ -730,6 +743,7 @@
   SCS.portalHeader = function (me, slot) {
     SCS.applyLogo();
     if (!me || !slot) return;
+    if (me.active && !slot.querySelector('[data-scs-activity]')) slot.appendChild(SCS.makeActivityBtn(''));
     var g = SCS.makeGear({ onLang: function () { location.reload(); } });
     slot.appendChild(g);
     SCS.startNotifications();

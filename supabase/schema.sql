@@ -1062,6 +1062,6 @@ language sql immutable as $$ select 3; $$;
 --  (লাইনের শুরুতে -- থাকলে সেটা চলে না — New query তে -- ছাড়া পেস্ট করুন)
 --
 --  insert into public.profiles (id, email, status, is_super_admin)
---  select id, email, 'active', true from auth.users where lower(email) = lower('scssouravmridha@gmail.com')
+--  select id, email, 'active', true from auth.users where lower(email) = lower('your-email@example.com')
 --  on conflict (id) do update set status = 'active', is_super_admin = true;
 -- =====================================================================

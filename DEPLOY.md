@@ -9,6 +9,7 @@ SQL কোড সবসময় `supabase/schema.sql` ফাইলে থাক
 
 | তারিখ | SQL Run লাগবে? | কী আপলোড করবেন | কী বদলেছে |
 |---|---|---|---|
+| 2026-11-13 (v3.1) | **না** — নতুন SQL লাগবে না (v3-এর `schema.sql` আগে Run করে থাকলে যথেষ্ট) | `admin.html`, `index.html`, `activity.html`, `assets/scs-core.js`, `assets/portal.css` | ইউজার ক্লিক করলে "উধাও" হওয়া ঠিক (কারণ: ব্রাউজার সেভ করা ইমেইল সার্চ বক্সে অটোফিল করছিল), নতুন Users & access UI (পরিসংখ্যান কার্ড, অনুমোদনের অপেক্ষার তালিকা, ক্লিক করলে ম্যানেজ পপআপ), হোম পেজ থেকে Recent activity সরিয়ে টপ বারে 🕘 আইকন |
 | 2026-11-13 (v3) | **হ্যাঁ** — পুরো `supabase/schema.sql` | সব ফাইল (বিশেষ করে `index.html`, `admin.html`, `profile.html`, `assets/`, `apps/`, `netlify/functions/`, `netlify.toml`) | SMS কোড দিয়ে অ্যাকাউন্ট খোলা/লগইন, "Unregistered API key" ঠিক, অনুমোদন ঠিক, Employee ID বদলানো যায়, টপ বারে হোম বাটন, গোলাপি হোম পেজ, Google Drive অটো ব্যাকআপ + রিস্টোর |
 | 2026-11-13 (v2) | হ্যাঁ | সব ফাইল | প্রোফাইল = এমপ্লয়ি, অ্যাডমিন পিন, নোটিফিকেশন, লোগো, Admin Console |
 
@@ -149,7 +150,7 @@ service_role key কোনো ফাইলে পাওয়া গেলে �
    - টেস্ট SMS-এ "SMS provider: ..." error দেখালে মেসেজটা আপনার SMS কোম্পানির। API key, Sender ID বা ব্যালান্স চেক করুন।
    - SMS কাজ করলে নতুন অ্যাকাউন্ট খোলা, লগইন আর পাসওয়ার্ড রিসেট মোবাইল কোড দিয়েই হবে। ইমেইল লিমিটের সমস্যা আর থাকবে না।
 3. **Logo** → দরকার হলে নতুন লোগো আপলোড করুন।
-4. **Users & access** → নতুন অ্যাকাউন্ট অনুমোদন দিন, প্রতিটা অ্যাপে User বা Admin টিক দিন, Employee ID ঠিক করুন।
+4. **Users & access** → "Waiting for your approval" কার্ডে **Approve & give access** চাপুন। পপআপে প্রতিটা অ্যাপে No access / User / Admin বেছে নিন, দরকার হলে Employee ID দিন, তারপর **Approve & save**। পরে যেকোনো ইউজারের উপর ক্লিক করলে একই পপআপে সব বদলানো যায়।
 5. Chemical Order → Admin (পিন দিয়ে) → SMS Setup আর PDF & Letterhead আবার চেক করুন।
 6. **Backup** → Google Drive অটো ব্যাকআপ (নিচে H দেখুন)।
 
@@ -198,6 +199,7 @@ service_role key কোনো ফাইলে পাওয়া গেলে �
 | "Unregistered API key" / "Invalid API key" | Netlify env var-এর Supabase key ভুল, অন্য প্রজেক্টের, বা rotate করা পুরনো key। Supabase থেকে আবার কপি করে বসান (আগে-পিছে ফাঁকা জায়গা ছাড়া) → Trigger deploy। Admin Console → SMS gateway → **Server check** দিয়ে যাচাই করুন |
 | SMS টেস্টে "SMS provider: ..." | এই মেসেজ SMS কোম্পানির: API key, Sender ID, ব্যালান্স বা IP whitelist চেক করুন |
 | Admin Console-এ লাল "database is not up to date" | সর্বশেষ `supabase/schema.sql` পুরোটা Run করুন |
+| ইউজার তালিকা থেকে কেউ "উধাও" হয়ে যায় | সার্চ বক্সে কিছু লেখা আছে কি না দেখুন। হলুদ "Search: … showing x / y" বারে **Clear search** চাপুন (v3.1-এ ব্রাউজারের অটোফিল বন্ধ করা হয়েছে) |
 | অনুমোদন/অ্যাক্সেস সেভ হয় না | লাল বার্তায় কারণ দেখাবে। সাধারণত schema.sql পুরনো, অথবা আপনি Super Admin নন (E ধাপ) |
 | কোনো অ্যাপে অ্যাডমিন পিন চায় না | GitHub-এ সেই অ্যাপের `apps/<app>/app.js` আর `backend.js` পুরনো রয়ে গেছে। নতুনগুলো আপলোড করুন, তারপর ব্রাউজারে Ctrl+F5 |
 | "Permission denied" | অ্যাকাউন্টের ওই অ্যাপে অ্যাক্সেস নেই, Admin Console থেকে দিন |

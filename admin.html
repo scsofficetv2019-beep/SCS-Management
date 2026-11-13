@@ -32,18 +32,17 @@
 
   <!-- USERS -->
   <section id="tUsers">
+    <div class="ustats" id="uStats"></div>
     <div class="toolbar">
-      <div class="tabs" id="stTabs" style="margin:0;flex:none">
-        <button type="button" data-s="all" class="on" data-i="All|সব"></button>
-        <button type="button" data-s="pending" data-i="Pending|অপেক্ষমাণ"></button>
-        <button type="button" data-s="active" data-i="Active|সক্রিয়"></button>
-        <button type="button" data-s="disabled" data-i="Disabled|বন্ধ"></button>
-      </div>
-      <input id="q" class="in-f" data-ph="Search name / email / mobile / employee ID…|নাম / ইমেইল / মোবাইল / এমপ্লয়ি আইডি খুঁজুন…" />
+      <!-- ব্রাউজার যেন সেভ করা ইমেইল এখানে বসিয়ে না দেয় (readonly + autocomplete off) -->
+      <div class="srch"><span class="ic">🔍</span><input id="q" class="in-f" type="search" name="scs-user-filter" autocomplete="off" autocorrect="off" spellcheck="false" readonly data-ph="Search name / email / mobile / employee ID…|নাম / ইমেইল / মোবাইল / এমপ্লয়ি আইডি খুঁজুন…" /><button type="button" class="x hidden" id="qClear" title="Clear">✕</button></div>
+      <button class="btn g s" type="button" id="uReload" style="padding:10px 12px">↻ <span data-i="Refresh|রিফ্রেশ"></span></button>
     </div>
     <div id="usersMsg"></div>
+    <div id="fNote"></div>
+    <div id="pendBox"></div>
     <div class="card" id="list"><div class="spin"></div></div>
-    <p class="small" style="margin-top:14px" data-ih="<b>User</b> = normal work in that app. <b>Admin</b> = that app's admin panel (with the admin PIN), deletes and settings. <b>Super Admin</b> = Admin of every app + this console. You can make several Super Admins.|<b>User</b> = অ্যাপে সাধারণ কাজ। <b>Admin</b> = সেই অ্যাপের অ্যাডমিন প্যানেল (অ্যাডমিন পিনসহ), ডিলিট, সেটিংস। <b>Super Admin</b> = সব অ্যাপে Admin + এই কনসোল। একাধিক Super Admin বানানো যায়।"></p>
+    <p class="small" style="margin-top:14px" data-ih="Click any person to manage: approve, app access (User / Admin), Super Admin, details and documents. <b>User</b> = normal work in that app. <b>Admin</b> = that app's admin panel (with the admin PIN), deletes and settings. <b>Super Admin</b> = Admin of every app + this console. You can make several Super Admins.|যেকোনো ইউজারের উপর ক্লিক করে ম্যানেজ করুন: অনুমোদন, অ্যাপ অ্যাক্সেস (User / Admin), Super Admin, তথ্য ও ডকুমেন্ট। <b>User</b> = অ্যাপে সাধারণ কাজ। <b>Admin</b> = সেই অ্যাপের অ্যাডমিন প্যানেল (অ্যাডমিন পিনসহ), ডিলিট, সেটিংস। <b>Super Admin</b> = সব অ্যাপে Admin + এই কনসোল। একাধিক Super Admin বানানো যায়।"></p>
   </section>
 
   <!-- APPS -->
@@ -194,54 +193,87 @@
   }
   document.querySelectorAll('#tabs button').forEach(function (b) { b.onclick = function () { tab(b.dataset.tab); }; });
 
-  function modal(html) { $('modalBody').innerHTML = html; $('modal').classList.remove('hidden'); }
-  function closeModal() { $('modal').classList.add('hidden'); }
+  function modal(html, cls) { var b = $('modalBody'); b.className = 'card' + (cls ? ' ' + cls : ''); b.onclick = null; b.oninput = null; b.innerHTML = html; $('modal').classList.remove('hidden'); }
+  function closeModal() { $('modal').classList.add('hidden'); $('modalBody').innerHTML = ''; }
   $('modal').addEventListener('click', function (e) { if (e.target === $('modal') || e.target.closest('[data-close]')) closeModal(); });
 
   /* ---------- users ---------- */
   function load() {
+    $('uReload').disabled = true;
     return Promise.all([
       SCS.q(sb.from('profiles').select('*').order('created_at', { ascending: false })),
       SCS.q(sb.from('app_access').select('*')),
       SCS.q(sb.from('apps').select('*').order('sort_order'))
-    ]).then(function (r) { st.profiles = r[0]; st.access = r[1]; st.apps = r[2]; render(); });
+    ]).then(function (r) { st.profiles = r[0] || []; st.access = r[1] || []; st.apps = r[2] || []; st.loaded = true; render(); })
+      .catch(function (e) { showErr(SCS.err(e)); if (!st.loaded) $('list').innerHTML = '<div class="empty">' + esc(SCS.err(e)) + '</div>'; })
+      .then(function () { $('uReload').disabled = false; });
   }
   function accessOf(uid) { var o = {}; st.access.forEach(function (a) { if (a.user_id === uid) o[a.app_key] = a.role; }); return o; }
   function prof(uid) { return st.profiles.filter(function (p) { return p.id === uid; })[0]; }
+  function avatar(p) {
+    return p.photo_url ? '<img class="av" src="' + esc(p.photo_url) + '" alt="" />' : '<div class="av">' + esc((p.full_name || p.email || '?').trim().charAt(0).toUpperCase()) + '</div>';
+  }
+  function stLabel(s) { return { pending: T('Waiting approval', 'অনুমোদনের অপেক্ষায়'), active: T('Active', 'সক্রিয়'), disabled: T('Disabled', 'বন্ধ') }[s] || s; }
+  function shortName(a) { return (SCS.lang === 'bn' && a.name_bn ? a.name_bn : a.name).replace(/^SCS /, ''); }
+
+  function pcard(p) {
+    return '<div class="pcard"><div class="top2">' + avatar(p) + '<div><b>' + esc(p.full_name || '—') + '</b>' +
+      '<div class="small">' + esc(p.email || '') + '</div><div class="small">' + esc(p.phone || '') + ' · ' + esc(SCS.ago(p.created_at)) +
+      (p.photo_url ? '' : ' · <span style="color:var(--warn)">' + T('no photo', 'ছবি নেই') + '</span>') + '</div></div></div>' +
+      '<div class="bt"><button type="button" class="btn p s" data-manage="' + p.id + '" data-approve="1">✔ ' + T('Approve & give access', 'অনুমোদন ও অ্যাক্সেস') + '</button>' +
+      '<button type="button" class="btn g s" data-reject="' + p.id + '" style="flex:none">✕ ' + T('Reject', 'বাতিল') + '</button></div></div>';
+  }
+  function urow(p) {
+    var acc = accessOf(p.id), self = p.id === st.me.id, chips;
+    if (p.is_super_admin) chips = '<span class="achip admin">★ ' + T('All apps · Admin', 'সব অ্যাপ · Admin') + '</span>';
+    else {
+      chips = st.apps.filter(function (a) { return acc[a.key]; }).map(function (a) {
+        return '<span class="achip ' + (acc[a.key] === 'admin' ? 'admin' : '') + '" title="' + esc(a.name) + '">' + esc(a.icon || '📦') + ' ' + (acc[a.key] === 'admin' ? 'Admin' : 'User') + '</span>';
+      }).join('') || '<span class="achip none">' + T('No app access', 'কোনো অ্যাপ অ্যাক্সেস নেই') + '</span>';
+    }
+    var stB = { pending: 'warn', active: 'ok', disabled: 'bad' }[p.status];
+    return '<div class="urow' + (st.flash === p.id ? ' flash' : '') + '" data-manage="' + p.id + '" role="button" tabindex="0">' + avatar(p) +
+      '<div class="info"><b>' + esc(p.full_name || '—') + '</b>' +
+      (p.is_super_admin ? '<span class="badge admin">Super Admin</span> ' : '') +
+      (p.status !== 'active' ? '<span class="badge ' + stB + '">' + esc(stLabel(p.status)) + '</span> ' : '') +
+      (self ? '<span class="badge">' + T('you', 'আপনি') + '</span> ' : '') +
+      (p.employee_id ? '<span class="badge user">' + esc(p.employee_id) + '</span>' : '') +
+      '<div class="small">' + esc(p.email || '') + (p.phone ? ' · ' + esc(p.phone) : '') + (p.designation ? ' · ' + esc(p.designation) : '') + '</div></div>' +
+      '<div class="chips">' + chips + '</div><span class="go">›</span></div>';
+  }
 
   function render() {
-    var pend = st.profiles.filter(function (p) { return p.status === 'pending'; }).length;
-    $('cPending').textContent = pend ? '(' + pend + ')' : '';
-    var q = st.q.toLowerCase();
-    var ORDER = { pending: 0, active: 1, disabled: 2 };
-    var rows = st.profiles.filter(function (p) {
-      // যার উপর এইমাত্র কাজ করা হলো সে ফিল্টারের বাইরে গেলেও তালিকায় থাকবে
-      if (st.status !== 'all' && p.status !== st.status && !st.keep[p.id]) return false;
-      return !q || [p.full_name, p.email, p.phone, p.employee_id, p.designation].join(' ').toLowerCase().indexOf(q) > -1;
-    }).sort(function (a, b) { return (ORDER[a.status] - ORDER[b.status]) || (a.created_at < b.created_at ? 1 : -1); });
-    if (!rows.length) { $('list').innerHTML = '<div class="empty">' + T('No users here.', 'কোনো ইউজার নেই।') + '</div>'; return; }
-    $('list').innerHTML = rows.map(function (p) {
-      var acc = accessOf(p.id), self = p.id === st.me.id;
-      var stBadge = { pending: 'warn', active: 'ok', disabled: 'bad' }[p.status];
-      var stTxt = { pending: T('pending', 'অপেক্ষমাণ'), active: T('active', 'সক্রিয়'), disabled: T('disabled', 'বন্ধ') }[p.status];
-      var apps = st.apps.map(function (a) {
-        var r = acc[a.key] || '';
-        return '<label class="pill"><input type="checkbox" data-acc="' + esc(a.key) + '" data-uid="' + p.id + '"' + (r ? ' checked' : '') + (p.is_super_admin ? ' disabled' : '') + ' /> ' + esc(a.icon || '') + ' ' + esc(a.name.replace(/^SCS /, '')) +
-          '<select data-role="' + esc(a.key) + '" data-uid="' + p.id + '"' + (!r || p.is_super_admin ? ' disabled' : '') + '><option value="user"' + (r === 'user' ? ' selected' : '') + '>User</option><option value="admin"' + (r === 'admin' ? ' selected' : '') + '>Admin</option></select></label>';
-      }).join('');
-      var btns = '';
-      if (p.status !== 'active') btns += '<button class="btn p s" data-st="active" data-uid="' + p.id + '">✔ ' + T('Approve', 'অনুমোদন') + '</button>';
-      if (p.status !== 'disabled' && !self) btns += '<button class="btn g s" data-st="disabled" data-uid="' + p.id + '">⛔ ' + T('Disable', 'বন্ধ') + '</button>';
-      btns += '<button class="btn g s" data-edit="' + p.id + '">✎ ' + T('Details', 'বিস্তারিত') + '</button>';
-      if (!self) btns += '<button class="btn g s" data-super="' + (p.is_super_admin ? '0' : '1') + '" data-uid="' + p.id + '">' + (p.is_super_admin ? T('Remove Super Admin', 'Super Admin বাদ') : '★ Super Admin') + '</button>';
-      var av = p.photo_url ? '<img class="av" src="' + esc(p.photo_url) + '" alt="" />' : '<div class="av">' + esc((p.full_name || p.email || '?').trim().charAt(0).toUpperCase()) + '</div>';
-      return '<div class="row' + '" data-row="' + p.id + '"' + (st.flash === p.id ? ' style="background:var(--ok-soft);transition:background 1.5s"' : '') + '>' + av +
-        '<div class="grow"><b>' + esc(p.full_name || '—') + '</b> ' + (p.is_super_admin ? '<span class="badge admin">Super Admin</span> ' : '') + '<span class="badge ' + stBadge + '">' + stTxt + '</span>' + (self ? ' <span class="badge">' + T('you', 'আপনি') + '</span>' : '') +
-        (p.employee_id ? ' <span class="badge user">' + esc(p.employee_id) + '</span>' : '') +
-        '<div class="small">' + esc(p.email) + (p.phone ? ' · ' + esc(p.phone) : '') + (p.designation ? ' · ' + esc(p.designation) : '') + ' · ' + T('joined', 'যোগদান') + ' ' + esc(SCS.fmt(p.created_at, 'd MMM yyyy')) + (p.photo_url ? '' : ' · <span style="color:var(--warn)">' + T('no photo', 'ছবি নেই') + '</span>') + '</div></div>' +
-        '<div class="acc">' + btns + '</div>' +
-        '<div class="acc" style="width:100%">' + (p.is_super_admin ? '<span class="small">' + T('Super Admin is Admin of every app.', 'Super Admin সব অ্যাপে Admin।') + '</span>' : apps) + '</div></div>';
+    var P = st.profiles;
+    var cnt = { all: P.length, pending: 0, active: 0, disabled: 0, super: 0 };
+    P.forEach(function (p) { cnt[p.status] = (cnt[p.status] || 0) + 1; if (p.is_super_admin) cnt.super++; });
+    $('cPending').textContent = cnt.pending ? '(' + cnt.pending + ')' : '';
+    var S = [['all', T('All users', 'সব ইউজার'), '#334155'], ['pending', T('Waiting approval', 'অনুমোদনের অপেক্ষায়'), '#d97706'],
+      ['active', T('Active', 'সক্রিয়'), '#059669'], ['disabled', T('Disabled', 'বন্ধ'), '#dc2626'], ['super', 'Super Admin', '#e91e63']];
+    $('uStats').innerHTML = S.map(function (s) {
+      return '<button type="button" class="ustat' + (st.status === s[0] ? ' on' : '') + '" data-ufilter="' + s[0] + '" style="--c:' + s[2] + '"><b>' + cnt[s[0]] + '</b><span>' + s[1] + '</span></button>';
     }).join('');
+
+    var q = st.q.trim().toLowerCase();
+    function matchQ(p) { return !q || [p.full_name, p.email, p.phone, p.employee_id, p.designation, p.department].join(' ').toLowerCase().indexOf(q) > -1; }
+    function matchS(p) { return st.status === 'all' || (st.status === 'super' ? p.is_super_admin : p.status === st.status) || st.keep[p.id]; }
+
+    var pend = P.filter(function (p) { return p.status === 'pending' && matchQ(p); });
+    var pendBox = (st.status === 'all' || st.status === 'pending') && pend.length > 0;
+    $('pendBox').innerHTML = pendBox ? '<div class="pend"><div class="h">⏳ ' + T('Waiting for your approval', 'আপনার অনুমোদনের অপেক্ষায়') + ' (' + pend.length + ')</div><div class="cards">' + pend.map(pcard).join('') + '</div></div>' : '';
+
+    var ORDER = { pending: 0, active: 1, disabled: 2 };
+    var rows = P.filter(function (p) { return matchS(p) && matchQ(p) && !(pendBox && p.status === 'pending'); })
+      .sort(function (a, b) { return (ORDER[a.status] - ORDER[b.status]) || ((b.is_super_admin ? 1 : 0) - (a.is_super_admin ? 1 : 0)) || String(a.full_name || '').localeCompare(String(b.full_name || '')); });
+
+    // সার্চের কারণে কেউ লুকিয়ে থাকলে সেটা পরিষ্কার দেখাই (যাতে "উধাও" মনে না হয়)
+    var inStatus = P.filter(matchS).length, shown = P.filter(function (p) { return matchS(p) && matchQ(p); }).length;
+    $('fNote').innerHTML = q ? '<div class="fnote">🔍 ' + T('Search', 'খোঁজা') + ': “' + esc(st.q) + '” · ' + T('showing', 'দেখাচ্ছে') + ' ' + shown + ' / ' + inStatus +
+      ' <button type="button" class="btn g s" data-qclear>✕ ' + T('Clear search', 'সার্চ মুছুন') + '</button></div>' : '';
+    $('qClear').classList.toggle('hidden', !st.q);
+
+    $('list').classList.toggle('hidden', pendBox && !rows.length);
+    $('list').innerHTML = rows.length ? rows.map(urow).join('') : '<div class="empty">' + T('No users here.', 'এখানে কোনো ইউজার নেই।') + '</div>';
+    if (st.flash) { var f = st.flash; setTimeout(function () { if (st.flash === f) st.flash = ''; var el = document.querySelector('.urow.flash'); if (el) el.classList.remove('flash'); }, 1800); }
   }
 
   function showErr(text) {
@@ -254,89 +286,171 @@
       return rows;
     });
   }
-  function act(p, okText, uid) {
-    showErr('');
-    if (uid) { st.keep[uid] = 1; st.flash = uid; }
-    return p.then(function () { if (okText) toast(okText); return load(); })
-      .catch(function (e) { var m = SCS.err(e); showErr(m); toast(m); return load(); })
-      .then(function () { setTimeout(function () { st.flash = ''; }, 1600); });
-  }
 
-  function editUser(uid) {
-    var p = prof(uid);
-    modal('<h2 class="h2">' + esc(p.full_name || p.email) + '</h2>' +
-      '<div class="row2"><div class="field"><label class="l">' + T('Full name', 'পূর্ণ নাম') + '</label><input class="in-f" id="eName" value="' + esc(p.full_name) + '" /></div>' +
-      '<div class="field"><label class="l">' + T('Mobile', 'মোবাইল') + '</label><input class="in-f" id="ePhone" value="' + esc(p.phone) + '" /></div></div>' +
-      '<div class="row2"><div class="field"><label class="l">' + T('Employee ID', 'এমপ্লয়ি আইডি') + '</label><input class="in-f" id="eEmp" value="' + esc(p.employee_id || '') + '" placeholder="' + T('any format, e.g. SCS-104 / E-2024-07', 'যেকোনো ফরম্যাট, যেমন SCS-104 / E-2024-07') + '" /></div>' +
-      '<div class="field"><label class="l">' + T('Designation', 'পদবি') + '</label><input class="in-f" id="eDes" value="' + esc(p.designation) + '" /></div></div>' +
-      '<div class="field"><label class="l">' + T('Department', 'বিভাগ') + '</label><input class="in-f" id="eDep" value="' + esc(p.department) + '" /></div>' +
-      '<label class="switch" style="margin-bottom:8px"><input type="checkbox" id="eEmpOn"' + (p.is_employee ? ' checked' : '') + ' /> ' + T('Show in Employee Attendance (is an employee)', 'Employee Attendance এ দেখাবে (কর্মচারী)') + '</label>' +
-      '<p class="small" style="margin:4px 0 14px">' + T('Tip: to keep old attendance history, enter the same Employee ID the person had in the old attendance sheet (e.g. SCS-104).', 'টিপস: পুরনো হাজিরার ইতিহাস রাখতে পুরনো শিটে যে Employee ID ছিল সেটাই দিন (যেমন SCS-104)।') + '</p>' +
-      '<div class="h2" style="font-size:14px">' + T('Documents', 'ডকুমেন্ট') + '</div><div id="eDocs" class="docs" style="margin-bottom:16px"><div class="small">…</div></div>' +
-      '<div style="display:flex;gap:8px;justify-content:flex-end"><button class="btn g" data-close>' + T('Cancel', 'বাতিল') + '</button><button class="btn p" id="eSave">' + T('Save', 'সেভ') + '</button></div>');
-    $('eSave').onclick = function () {
-      var upd = { full_name: $('eName').value.trim(), phone: $('ePhone').value.trim(), employee_id: $('eEmp').value.trim() || null, designation: $('eDes').value.trim(), department: $('eDep').value.trim(), is_employee: $('eEmpOn').checked };
-      if (upd.employee_id && upd.employee_id.length > 40) { toast(T('Employee ID is too long (max 40)', 'Employee ID খুব বড় (সর্বোচ্চ ৪০)')); return; }
-      $('eSave').disabled = true;
-      st.keep[uid] = 1; st.flash = uid;
-      updProfile(uid, upd).then(function () { closeModal(); toast(T('Saved', 'সেভ হয়েছে')); return load(); })
-        .catch(function (e) { $('eSave').disabled = false; var m = /duplicate|unique/i.test(SCS.err(e)) ? T('This Employee ID is already used by another account.', 'এই Employee ID অন্য অ্যাকাউন্টে আছে।') : SCS.err(e); toast(m); alert(m); });
+  /* ---------- manage one person (popup) ---------- */
+  function openManage(uid, approve) {
+    var p = prof(uid); if (!p) return;
+    var self = uid === st.me.id, oldAcc = accessOf(uid);
+    var d = { status: p.status, super: !!p.is_super_admin, acc: Object.assign({}, oldAcc) };
+    if (approve && d.status === 'pending') d.status = 'active';
+
+    function segBtns(kind, cur, opts) {
+      return '<div class="seg3" data-seg="' + kind + '"' + (opts.app ? ' data-app="' + esc(opts.app) + '"' : '') + '>' + opts.items.map(function (it) {
+        return '<button type="button" data-v="' + it[0] + '"' + (cur === it[0] ? ' class="on"' : '') + (it[2] ? ' disabled' : '') + '>' + it[1] + '</button>';
+      }).join('') + '</div>';
+    }
+    function appsHtml() {
+      if (d.super) return '<div class="msg info" style="margin:8px 0 0">★ ' + T('Super Admin is Admin of every app (and of this console).', 'Super Admin সব অ্যাপে Admin (এবং এই কনসোলেও)।') + '</div>';
+      return st.apps.map(function (a) {
+        return '<div class="arow"><div class="aic" style="background:' + esc(a.color || '#e91e63') + '">' + esc(a.icon || '📦') + '</div><div class="nm">' + esc(shortName(a)) + (a.active ? '' : ' <span class="badge">' + T('hidden', 'লুকানো') + '</span>') + '</div>' +
+          segBtns('app', d.acc[a.key] || '', { app: a.key, items: [['', T('No access', 'নেই')], ['user', 'User'], ['admin', 'Admin']] }) + '</div>';
+      }).join('') + '<div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap"><button type="button" class="btn g s" data-allapps="user">' + T('User in all apps', 'সব অ্যাপে User') + '</button><button type="button" class="btn g s" data-allapps="">' + T('Remove all', 'সব সরান') + '</button></div>';
+    }
+    function statusHtml() {
+      return segBtns('status', d.status, { items: [['pending', '⏳ ' + T('Pending', 'অপেক্ষমাণ'), self], ['active', '✔ ' + T('Active', 'সক্রিয়')], ['disabled', '⛔ ' + T('Disabled', 'বন্ধ'), self]] }) +
+        '<div class="small" style="margin-top:6px">' + (d.status === 'active' ? T('Can log in and use the apps ticked below.', 'লগইন করে নিচে টিক দেওয়া অ্যাপগুলো ব্যবহার করতে পারবে।') : d.status === 'disabled' ? T('Cannot open any app.', 'কোনো অ্যাপে ঢুকতে পারবে না।') : T('Not approved yet — cannot open any app.', 'এখনো অনুমোদিত নয় — কোনো অ্যাপে ঢুকতে পারবে না।')) + '</div>';
+    }
+    function changes() {
+      var n = 0;
+      if (d.status !== p.status) n++;
+      if (d.super !== !!p.is_super_admin) n++;
+      if (!d.super) st.apps.forEach(function (a) { if ((d.acc[a.key] || '') !== (oldAcc[a.key] || '')) n++; });
+      ['full_name', 'phone', 'employee_id', 'designation', 'department'].forEach(function (k) { var el = $('m_' + k); if (el && el.value.trim() !== String(p[k] || '')) n++; });
+      if ($('m_emp') && $('m_emp').checked !== !!p.is_employee) n++;
+      return n;
+    }
+    function paint() {
+      $('mgStatus').innerHTML = statusHtml();
+      $('mgApps').innerHTML = appsHtml();
+      var n = changes();
+      $('mgNote').textContent = n ? n + ' ' + T('unsaved change(s)', 'টি পরিবর্তন সেভ বাকি') : T('No changes', 'কোনো পরিবর্তন নেই');
+      $('mgSave').textContent = p.status === 'pending' && d.status === 'active' ? '✔ ' + T('Approve & save', 'অনুমোদন ও সেভ') : T('Save changes', 'সেভ করুন');
+    }
+    function fld(k, label, ph) {
+      return '<div class="field"><label class="l">' + label + '</label><input class="in-f" id="m_' + k + '" autocomplete="off" value="' + esc(p[k] || '') + '"' + (ph ? ' placeholder="' + esc(ph) + '"' : '') + ' /></div>';
+    }
+    modal('<div class="mg-hd">' + avatar(p) + '<div style="min-width:0"><h2>' + esc(p.full_name || p.email) + '</h2>' +
+      '<div class="small">' + esc(p.email || '') + (p.phone ? ' · ' + esc(p.phone) : '') + '</div>' +
+      '<div class="small">' + T('Joined', 'যোগদান') + ' ' + esc(SCS.fmt(p.created_at, 'd MMM yyyy')) + (p.employee_id ? ' · ' + esc(p.employee_id) : '') + '</div></div>' +
+      '<button type="button" class="x" data-close>✕</button></div>' +
+      '<div class="mg-bd"><div id="mgMsg"></div>' +
+      '<div class="mg-sec"><div class="t">' + T('Account status', 'অ্যাকাউন্টের অবস্থা') + '</div><div id="mgStatus"></div></div>' +
+      '<div class="mg-sec"><div class="t">' + T('App access', 'অ্যাপ অ্যাক্সেস') + '</div>' +
+      '<label class="switch" style="margin-bottom:6px"><input type="checkbox" id="mgSuper"' + (d.super ? ' checked' : '') + (self ? ' disabled' : '') + ' /> ★ Super Admin ' + '<span class="small">(' + T('all apps + Admin Console', 'সব অ্যাপ + অ্যাডমিন কনসোল') + ')</span></label>' +
+      '<div id="mgApps"></div></div>' +
+      '<div class="mg-sec"><div class="t">' + T('Employee details', 'এমপ্লয়ির তথ্য') + '</div>' +
+      '<div class="row2">' + fld('full_name', T('Full name', 'পূর্ণ নাম')) + fld('phone', T('Mobile', 'মোবাইল')) + '</div>' +
+      '<div class="row2">' + fld('employee_id', T('Employee ID', 'এমপ্লয়ি আইডি'), T('any format, e.g. SCS-104', 'যেকোনো ফরম্যাট, যেমন SCS-104')) + fld('designation', T('Designation', 'পদবি')) + '</div>' +
+      fld('department', T('Department', 'বিভাগ')) +
+      '<label class="switch"><input type="checkbox" id="m_emp"' + (p.is_employee ? ' checked' : '') + ' /> ' + T('Show in Employee Attendance (is an employee)', 'Employee Attendance এ দেখাবে (কর্মচারী)') + '</label></div>' +
+      '<div class="mg-sec" style="margin-bottom:0"><div class="t">' + T('Documents', 'ডকুমেন্ট') + '</div><div id="eDocs" class="docs"><div class="small">…</div></div></div></div>' +
+      '<div class="mg-ft"><span class="note" id="mgNote"></span><button type="button" class="btn g" data-close>' + T('Cancel', 'বাতিল') + '</button><button type="button" class="btn p" id="mgSave"></button></div>', 'wide');
+    paint();
+
+    var body = $('modalBody');
+    body.onclick = function (e) {
+      var b = e.target.closest('.seg3 button');
+      if (b && !b.disabled) {
+        var seg = b.parentElement, v = b.getAttribute('data-v');
+        if (seg.dataset.seg === 'status') d.status = v;
+        if (seg.dataset.seg === 'app') { d.acc[seg.dataset.app] = v; if (v && d.status === 'pending') d.status = 'active'; }
+        paint(); return;
+      }
+      var all = e.target.closest('[data-allapps]');
+      if (all) { var v2 = all.getAttribute('data-allapps'); st.apps.forEach(function (a) { d.acc[a.key] = v2; }); if (v2 && d.status === 'pending') d.status = 'active'; paint(); }
     };
+    body.oninput = function () { $('mgNote').textContent = changes() ? changes() + ' ' + T('unsaved change(s)', 'টি পরিবর্তন সেভ বাকি') : T('No changes', 'কোনো পরিবর্তন নেই'); };
+    $('mgSuper').onchange = function () { d.super = this.checked; if (d.super) d.status = 'active'; paint(); };
+
+    $('mgSave').onclick = function () {
+      var btn = this, upd = {};
+      ['full_name', 'phone', 'employee_id', 'designation', 'department'].forEach(function (k) {
+        var v = $('m_' + k).value.trim(); if (v !== String(p[k] || '')) upd[k] = (k === 'employee_id' && !v) ? null : v;
+      });
+      if ($('m_emp').checked !== !!p.is_employee) upd.is_employee = $('m_emp').checked;
+      if (!('full_name' in upd) || upd.full_name) { /* ok */ } else { $('mgMsg').innerHTML = '<div class="msg bad">' + T('Name cannot be empty', 'নাম ফাঁকা রাখা যাবে না') + '</div>'; return; }
+      if (upd.employee_id && upd.employee_id.length > 40) { $('mgMsg').innerHTML = '<div class="msg bad">' + T('Employee ID is too long (max 40)', 'Employee ID খুব বড় (সর্বোচ্চ ৪০)') + '</div>'; return; }
+      if (d.status !== p.status) upd.status = d.status;
+      if (d.super !== !!p.is_super_admin) upd.is_super_admin = d.super;
+      if (upd.status === 'disabled' && !confirm(T('Disable this account? The person will not be able to open any app.', 'এই অ্যাকাউন্ট বন্ধ করবেন? সে আর কোনো অ্যাপে ঢুকতে পারবে না।'))) return;
+      if (upd.is_super_admin === true && !confirm(T('Make Super Admin? They will be Admin of every app and can manage users.', 'Super Admin বানালে সে সব অ্যাপে Admin হবে এবং ইউজার ম্যানেজ করতে পারবে। নিশ্চিত?'))) return;
+
+      btn.disabled = true; btn.textContent = T('Saving…', 'সেভ হচ্ছে…');
+      $('mgMsg').innerHTML = '';
+      // ধাপে ধাপে সেভ: আগে প্রোফাইল (অনুমোদন), তারপর প্রতিটা অ্যাপের অ্যাক্সেস — প্রতিটা ধাপ যাচাই করা হয়
+      var chain = Object.keys(upd).length ? updProfile(uid, upd) : Promise.resolve();
+      if (!d.super) st.apps.forEach(function (a) {
+        var nr = d.acc[a.key] || '', or = oldAcc[a.key] || '';
+        if (nr === or) return;
+        chain = chain.then(function () {
+          var qy = nr ? sb.from('app_access').upsert({ user_id: uid, app_key: a.key, role: nr }).select('user_id')
+                      : sb.from('app_access').delete().eq('user_id', uid).eq('app_key', a.key).select('user_id');
+          return SCS.q(qy).then(function (rows) {
+            if (!rows || !rows.length) throw new Error(shortName(a) + ': ' + T('access not saved — make sure you are Super Admin and the latest supabase/schema.sql has been run.', 'অ্যাক্সেস সেভ হয়নি — আপনি Super Admin কি না দেখুন এবং সর্বশেষ supabase/schema.sql Run করুন।'));
+          });
+        });
+      });
+      chain.then(function () {
+        closeModal(); showErr('');
+        st.keep[uid] = 1; st.flash = uid;
+        toast(upd.status === 'active' && p.status !== 'active' ? T('Approved and saved', 'অনুমোদন দেওয়া ও সেভ হয়েছে') : T('Saved', 'সেভ হয়েছে'));
+        return load();
+      }).catch(function (e) {
+        var m = SCS.err(e);
+        if (/duplicate|unique/i.test(m)) m = T('This Employee ID is already used by another account.', 'এই Employee ID অন্য অ্যাকাউন্টে আছে।');
+        $('mgMsg').innerHTML = '<div class="msg bad" style="font-size:14px">⚠️ ' + esc(m) + '</div>';
+        $('modalBody').scrollIntoView({ block: 'start' });
+        btn.disabled = false; paint();
+        // যতটুকু সেভ হয়েছে তা মিলিয়ে নেওয়া
+        load().then(function () { var np = prof(uid); if (np) { p = np; oldAcc = accessOf(uid); paint(); } });
+      });
+    };
+
     SCS.q(sb.from('profile_documents').select('*').eq('user_id', uid).order('created_at')).then(function (docs) {
       var K = { nid_front: 'NID front', nid_back: 'NID back', certificate: 'Certificate', other: 'Other' };
+      if (!$('eDocs')) return;
       if (!docs.length) { $('eDocs').innerHTML = '<div class="small">' + T('No documents uploaded.', 'কোনো ডকুমেন্ট আপলোড করা হয়নি।') + '</div>'; return; }
-      $('eDocs').innerHTML = docs.map(function (d) {
-        return '<div class="doc"><div class="th" data-th="' + esc(d.path) + '">' + (/pdf/.test(d.mime) ? '📄' : '🖼️') + '</div><b>' + esc(d.title || K[d.kind]) + '</b><button type="button" class="link" data-docopen="' + esc(d.path) + '" style="text-align:left;font-size:12px">' + T('Open', 'খুলুন') + '</button></div>';
+      $('eDocs').innerHTML = docs.map(function (dc) {
+        return '<div class="doc"><div class="th" data-th="' + esc(dc.path) + '">' + (/pdf/.test(dc.mime) ? '📄' : '🖼️') + '</div><b>' + esc(dc.title || K[dc.kind]) + '</b><button type="button" class="link" data-docopen="' + esc(dc.path) + '" style="text-align:left;font-size:12px">' + T('Open', 'খুলুন') + '</button></div>';
       }).join('');
-      docs.forEach(function (d) {
-        if (!/^image\//.test(d.mime)) return;
-        SCS.signedUrl(d.path, 3600).then(function (u) { var el = document.querySelector('[data-th="' + d.path + '"]'); if (el) { el.style.backgroundImage = 'url(\'' + u + '\')'; el.textContent = ''; } });
+      docs.forEach(function (dc) {
+        if (!/^image\//.test(dc.mime)) return;
+        SCS.signedUrl(dc.path, 3600).then(function (u) { var el = document.querySelector('[data-th="' + dc.path + '"]'); if (el) { el.style.backgroundImage = 'url(\'' + u + '\')'; el.textContent = ''; } });
       });
-    }).catch(function (e) { $('eDocs').innerHTML = '<div class="small">' + esc(SCS.err(e)) + '</div>'; });
+    }).catch(function (e) { if ($('eDocs')) $('eDocs').innerHTML = '<div class="small">' + esc(SCS.err(e)) + '</div>'; });
   }
 
   document.addEventListener('click', function (e) {
-    var b = e.target.closest('button');
-    if (!b) return;
-    if (b.parentElement && b.parentElement.id === 'stTabs') {
-      st.status = b.dataset.s;
-      document.querySelectorAll('#stTabs button').forEach(function (x) { x.classList.toggle('on', x === b); });
-      render(); return;
+    var t = e.target;
+    var f = t.closest('[data-ufilter]');
+    if (f) { st.status = f.getAttribute('data-ufilter'); st.keep = {}; render(); return; }
+    if (t.closest('[data-qclear]') || t.closest('#qClear')) { $('q').value = ''; st.q = ''; render(); return; }
+    var dop = t.closest('[data-docopen]');
+    if (dop) { var w = window.open('', '_blank'); SCS.signedUrl(dop.getAttribute('data-docopen'), 600).then(function (u) { w.location = u; }).catch(function (er) { w.close(); toast(SCS.err(er)); }); return; }
+    var rj = t.closest('[data-reject]');
+    if (rj) {
+      var ru = rj.getAttribute('data-reject');
+      if (!confirm(T('Reject this account? It will be disabled and cannot open any app. You can enable it later.', 'এই অ্যাকাউন্ট বাতিল করবেন? এটা বন্ধ হয়ে যাবে, কোনো অ্যাপে ঢুকতে পারবে না। পরে আবার চালু করা যাবে।'))) return;
+      st.keep[ru] = 1; st.flash = ru;
+      updProfile(ru, { status: 'disabled' }).then(function () { showErr(''); toast(T('Account rejected (disabled)', 'অ্যাকাউন্ট বাতিল (বন্ধ) করা হয়েছে')); return load(); })
+        .catch(function (er) { showErr(SCS.err(er)); toast(SCS.err(er)); });
+      return;
     }
-    if (b.dataset.docopen) { var w = window.open('', '_blank'); SCS.signedUrl(b.dataset.docopen, 600).then(function (u) { w.location = u; }).catch(function (er) { w.close(); toast(SCS.err(er)); }); return; }
-    if (b.dataset.edit) { editUser(b.dataset.edit); return; }
-    if (b.dataset.st) {
-      var s = b.dataset.st;
-      if (s === 'disabled' && !confirm(T('Disable this account? The person will not be able to open any app.', 'এই অ্যাকাউন্ট বন্ধ করবেন? সে আর কোনো অ্যাপে ঢুকতে পারবে না।'))) return;
-      act(updProfile(b.dataset.uid, { status: s }), s === 'active' ? T('Approved — now tick the apps this person can use', 'অনুমোদন দেওয়া হয়েছে — এখন অ্যাপের অ্যাক্সেস টিক দিন') : T('Account disabled', 'অ্যাকাউন্ট বন্ধ করা হয়েছে'), b.dataset.uid);
-    }
-    if (b.dataset.super) {
-      var on = b.dataset.super === '1';
-      if (!confirm(on ? T('Make Super Admin? They will be Admin of every app and can manage users.', 'Super Admin বানালে সে সব অ্যাপে Admin হবে এবং ইউজার ম্যানেজ করতে পারবে। নিশ্চিত?') : T('Remove Super Admin rights?', 'Super Admin ক্ষমতা সরিয়ে নেবেন?'))) return;
-      var upd = { is_super_admin: on }; if (on) upd.status = 'active';
-      act(updProfile(b.dataset.uid, upd), T('Updated', 'আপডেট হয়েছে'), b.dataset.uid);
-    }
+    var mg = t.closest('[data-manage]');
+    if (mg && !t.closest('#modal')) { openManage(mg.getAttribute('data-manage'), mg.hasAttribute('data-approve')); }
   });
-
-  document.addEventListener('change', function (e) {
-    var el = e.target;
-    if (el.dataset.acc) {
-      var uid = el.dataset.uid, app = el.dataset.acc, p0 = prof(uid);
-      if (el.checked) {
-        if (p0 && p0.status !== 'active' && !confirm(T('This account is not approved yet. Approve it too?', 'অ্যাকাউন্টটি এখনো অনুমোদিত নয়। অনুমোদনও দিয়ে দেবেন?'))) { el.checked = false; return; }
-        var p = (p0 && p0.status !== 'active') ? updProfile(uid, { status: 'active' }) : Promise.resolve();
-        p = p.then(function () { return SCS.q(sb.from('app_access').upsert({ user_id: uid, app_key: app, role: 'user' }).select('user_id')); })
-          .then(function (rows) { if (!rows || !rows.length) throw new Error(T('Access not saved — run the latest supabase/schema.sql.', 'অ্যাক্সেস সেভ হয়নি — সর্বশেষ supabase/schema.sql Run করুন।')); });
-        act(p, T('Access given', 'অ্যাক্সেস দেওয়া হয়েছে'), uid);
-      } else {
-        act(SCS.q(sb.from('app_access').delete().eq('user_id', uid).eq('app_key', app)), T('Access removed', 'অ্যাক্সেস সরানো হয়েছে'), uid);
-      }
-    }
-    if (el.dataset.role) {
-      act(SCS.q(sb.from('app_access').update({ role: el.value }).eq('user_id', el.dataset.uid).eq('app_key', el.dataset.role)), T('Role changed', 'রোল বদলানো হয়েছে'), el.dataset.uid);
-    }
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter' && e.target.classList && e.target.classList.contains('urow')) openManage(e.target.getAttribute('data-manage'), false);
   });
-  $('q').addEventListener('input', function (e) { st.q = e.target.value; render(); });
+  $('uReload').onclick = function () { load(); };
+  // ব্রাউজারের অটোফিল ঠেকাতে: ক্লিক/ফোকাস করলে তবেই লেখা যাবে
+  ['pointerdown', 'focus', 'keydown'].forEach(function (ev) { $('q').addEventListener(ev, function () { this.removeAttribute('readonly'); }); });
+  $('q').value = '';
+  $('q').addEventListener('input', function (e) {
+    // মানুষ টাইপ না করে ব্রাউজার নিজে বসালে (অটোফিল) উপেক্ষা
+    if (document.activeElement !== e.target && !st.q) { e.target.value = ''; return; }
+    st.q = e.target.value; render();
+  });
 
   /* ---------- apps & PINs ---------- */
   function loadApps() {

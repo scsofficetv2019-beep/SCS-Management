@@ -151,15 +151,7 @@
     </div>
     <div class="stats" id="hStats"></div>
   </div>
-  <div class="home-grid">
-    <section>
-      <div class="grid" id="appGrid"></div>
-    </section>
-    <aside class="card feed">
-      <div class="card-hd"><b data-i="Recent activity|সাম্প্রতিক অ্যাক্টিভিটি"></b><a class="link" href="/activity.html" data-i="View all →|সব দেখুন →"></a></div>
-      <div id="feed"><div class="spin" style="margin:24px auto"></div></div>
-    </aside>
-  </div>
+  <div class="grid" id="appGrid"></div>
 </main>
 
 <div id="toast" class="toast hidden"></div>
@@ -366,7 +358,6 @@
   }
 
   /* ---------- home ---------- */
-  var ACT_IC = { Add: '+', Edit: '✎', Delete: '−' };
   function renderHome(me) {
     var h = Number(SCS.fmt(new Date(), 'HH'));
     var greet = h < 12 ? T('Good morning', 'শুভ সকাল') : h < 17 ? T('Good afternoon', 'শুভ অপরাহ্ন') : T('Good evening', 'শুভ সন্ধ্যা');
@@ -389,17 +380,6 @@
         '<div><h3>' + esc(nm) + '</h3><p>' + esc(a.description || '') + '</p></div>' +
         '<div class="ft">' + (role ? '<span class="badge ' + role + '">' + role + '</span><span class="go">→</span>' : '<span class="badge">🔒 ' + T('No access', 'অ্যাক্সেস নেই') + '</span>') + '</div></a>';
     }).join('') || '<div class="empty">' + T('No apps yet.', 'কোনো অ্যাপ নেই।') + '</div>';
-    loadFeed(me);
-  }
-  function loadFeed(me) {
-    var names = {}; me.apps.forEach(function (a) { names[a.key] = a; });
-    SCS.q(sb.from('audit_log').select('id,at,app_key,entity,record_ref,action,actor_name').neq('app_key', 'core').order('id', { ascending: false }).limit(10)).then(function (rows) {
-      $('feed').innerHTML = rows.length ? rows.map(function (r) {
-        var a = names[r.app_key] || {};
-        return '<a class="it" href="/activity.html?app=' + encodeURIComponent(r.app_key) + '"><span class="dot ' + esc(r.action) + '">' + (ACT_IC[r.action] || '•') + '</span><div style="min-width:0"><b>' + esc((r.entity || '') + ' ' + (r.record_ref || '')) + '</b>' +
-          '<p>' + esc(r.actor_name || 'System') + ' · ' + esc(a.icon || '') + ' ' + esc((a.name || r.app_key).replace(/^SCS /, '')) + ' · ' + esc(SCS.ago(r.at)) + '</p></div></a>';
-      }).join('') : '<div class="empty" style="padding:24px">' + T('No activity yet.', 'এখনো কোনো অ্যাক্টিভিটি নেই।') + '</div>';
-    }).catch(function () { $('feed').innerHTML = '<div class="empty" style="padding:24px">—</div>'; });
   }
 
   /* ---------- router ---------- */
