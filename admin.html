@@ -1,0 +1,371 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Admin Console · SCS</title>
+<link rel="icon" type="image/png" href="/assets/icon-192.png" />
+<link rel="manifest" href="/manifest.webmanifest" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Hind+Siliguri:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="/assets/portal.css" />
+</head>
+<body>
+<div class="bg-art" aria-hidden="true"><img data-scs-logo alt="" /></div>
+<header class="top">
+  <div class="in">
+    <a class="logo" href="/"><span class="mk"><img data-scs-logo alt="SCS" /></span><span><b data-i="Admin Console|অ্যাডমিন কনসোল"></b><small>SCS Management</small></span></a>
+    <div class="act" id="topAct"><a class="chip" href="/">🏠 <span class="hide-sm" data-i="Home|হোম"></span></a></div>
+  </div>
+</header>
+
+<main class="wrap">
+  <div class="sidenav" id="tabs">
+    <button type="button" data-tab="users" class="on">👥 <span data-i="Users & access|ইউজার ও অ্যাক্সেস"></span> <span id="cPending"></span></button>
+    <button type="button" data-tab="apps">🧩 <span data-i="Apps & admin PINs|অ্যাপ ও অ্যাডমিন পিন"></span></button>
+    <button type="button" data-tab="brand">🖼️ <span data-i="Logo|লোগো"></span></button>
+    <button type="button" data-tab="sms">✉️ <span data-i="SMS gateway|SMS গেটওয়ে"></span></button>
+    <button type="button" data-tab="tools">🧰 <span data-i="Tools|টুলস"></span></button>
+  </div>
+
+  <!-- USERS -->
+  <section id="tUsers">
+    <div class="toolbar">
+      <div class="tabs" id="stTabs" style="margin:0;flex:none">
+        <button type="button" data-s="pending" class="on" data-i="Pending|অপেক্ষমাণ"></button>
+        <button type="button" data-s="active" data-i="Active|সক্রিয়"></button>
+        <button type="button" data-s="disabled" data-i="Disabled|বন্ধ"></button>
+        <button type="button" data-s="all" data-i="All|সব"></button>
+      </div>
+      <input id="q" class="in-f" data-ph="Search name / email / mobile / employee ID…|নাম / ইমেইল / মোবাইল / এমপ্লয়ি আইডি খুঁজুন…" />
+    </div>
+    <div class="card" id="list"><div class="spin"></div></div>
+    <p class="small" style="margin-top:14px" data-ih="<b>User</b> = normal work in that app. <b>Admin</b> = that app's admin panel (with the admin PIN), deletes and settings. <b>Super Admin</b> = Admin of every app + this console. You can make several Super Admins.|<b>User</b> = অ্যাপে সাধারণ কাজ। <b>Admin</b> = সেই অ্যাপের অ্যাডমিন প্যানেল (অ্যাডমিন পিনসহ), ডিলিট, সেটিংস। <b>Super Admin</b> = সব অ্যাপে Admin + এই কনসোল। একাধিক Super Admin বানানো যায়।"></p>
+  </section>
+
+  <!-- APPS -->
+  <section id="tApps" class="hidden">
+    <div class="toolbar"><div class="grow"><h2 class="h2" style="margin:0" data-i="Apps in SCS Management|SCS Management এর অ্যাপগুলো"></h2></div><button class="btn p s" type="button" id="addApp">＋ <span data-i="Add app|অ্যাপ যোগ করুন"></span></button></div>
+    <div class="card" id="appList"><div class="spin"></div></div>
+    <p class="small" style="margin-top:12px" data-ih="To add a new app: upload its folder to <code>apps/&amp;lt;key&amp;gt;/</code> in GitHub, then add it here with the same key and path <code>/apps/&amp;lt;key&amp;gt;/</code>. Every app admin must enter that app's <b>admin PIN</b> to open its admin panel.|নতুন অ্যাপ: GitHub এ <code>apps/&amp;lt;key&amp;gt;/</code> ফোল্ডারে অ্যাপ আপলোড করে এখানে একই key ও path <code>/apps/&amp;lt;key&amp;gt;/</code> দিয়ে যোগ করুন। অ্যাপের অ্যাডমিন প্যানেল খুলতে প্রত্যেক Admin কে সেই অ্যাপের <b>অ্যাডমিন পিন</b> দিতে হবে।"></p>
+  </section>
+
+  <!-- BRAND -->
+  <section id="tBrand" class="hidden">
+    <div class="card pad" style="max-width:560px">
+      <h2 class="h2" data-i="Company logo|কোম্পানির লোগো"></h2>
+      <div class="photo-up" style="margin-bottom:14px">
+        <img id="logoPrev" data-scs-logo alt="" style="width:120px;height:120px;object-fit:contain;border-radius:22px;border:1px solid var(--line);background:#fff;padding:6px" />
+        <div>
+          <button class="btn p s" type="button" id="pickLogo" data-i="Upload new logo|নতুন লোগো আপলোড"></button>
+          <button class="btn g s" type="button" id="resetLogo" data-i="Use default|ডিফল্ট লোগো"></button>
+          <p class="small" style="margin:8px 0 0" data-i="PNG, JPG, WebP or SVG. A square image works best. Shown on the home page, top bars, app headers and notifications.|PNG, JPG, WebP বা SVG। বর্গাকার ছবি ভালো। হোম পেজ, টপ বার, অ্যাপের হেডার ও নোটিফিকেশনে দেখাবে।"></p>
+        </div>
+      </div>
+      <input type="file" id="fLogo" accept="image/png,image/jpeg,image/webp,image/svg+xml" class="hidden" />
+    </div>
+  </section>
+
+  <!-- SMS -->
+  <section id="tSms" class="hidden">
+    <div class="card pad" style="max-width:640px">
+      <h2 class="h2" data-i="SMS gateway (password reset codes)|SMS গেটওয়ে (পাসওয়ার্ড রিসেট কোড)"></h2>
+      <p class="small" style="margin-top:-4px" data-i="Used to send password reset codes to mobile numbers. If left empty, the Chemical Order SMS settings are used. The API key is stored secretly — nobody can read it back from the browser.|মোবাইলে পাসওয়ার্ড রিসেট কোড পাঠাতে ব্যবহার হয়। ফাঁকা রাখলে Chemical Order এর SMS সেটিং ব্যবহার হবে। API key গোপনে জমা থাকে — ব্রাউজার থেকে কেউ আর দেখতে পারবে না।"></p>
+      <div id="smsMsg"></div>
+      <label class="switch" style="margin-bottom:14px"><input type="checkbox" id="smsOn" /> <span data-i="SMS gateway enabled|SMS গেটওয়ে চালু"></span></label>
+      <div class="field"><label class="l" data-i="Send endpoint URL|SMS পাঠানোর এন্ডপয়েন্ট URL"></label><input class="in-f" id="smsUrl" placeholder="https://bulksmsbd.net/api/smsapi" /></div>
+      <div class="row2">
+        <div class="field"><label class="l" data-i="API key|API key"></label><input class="in-f" id="smsKey" type="password" autocomplete="off" /></div>
+        <div class="field"><label class="l" data-i="Sender ID|Sender ID"></label><input class="in-f" id="smsSender" /></div>
+      </div>
+      <details style="margin-bottom:14px"><summary class="small" style="cursor:pointer;font-weight:700" data-i="Advanced: parameter names|অ্যাডভান্সড: প্যারামিটারের নাম"></summary>
+        <div class="row2" style="margin-top:10px">
+          <div class="field"><label class="l">API key param</label><input class="in-f" id="prKey" placeholder="api_key" /></div>
+          <div class="field"><label class="l">Message param</label><input class="in-f" id="prMsg" placeholder="msg" /></div>
+          <div class="field"><label class="l">Number param</label><input class="in-f" id="prTo" placeholder="to" /></div>
+          <div class="field"><label class="l">Sender ID param</label><input class="in-f" id="prSender" placeholder="sender_id" /></div>
+        </div>
+        <p class="small" style="margin:0" data-i="The request is sent as an HTTP POST form (application/x-www-form-urlencoded).|রিকোয়েস্ট HTTP POST ফর্ম (application/x-www-form-urlencoded) হিসেবে যায়।"></p>
+      </details>
+      <button class="btn p" type="button" id="smsSave" data-i="Save SMS settings|SMS সেটিংস সেভ করুন"></button>
+      <hr style="border:0;border-top:1px solid var(--line);margin:20px 0" />
+      <div class="toolbar" style="margin:0"><input class="in-f" id="smsTo" placeholder="01XXXXXXXXX" style="max-width:220px" /><button class="btn g" type="button" id="smsTest" data-i="Send test SMS|টেস্ট SMS পাঠান"></button></div>
+    </div>
+  </section>
+
+  <!-- TOOLS -->
+  <section id="tTools" class="hidden">
+    <div class="grid">
+      <a class="card app" style="--c:#2563eb" href="/migrate.html"><div class="ic">⇪</div><div><h3 data-i="Data migration|ডাটা মাইগ্রেশন"></h3><p data-i="Import old Google Sheet data (one time).|পুরনো Google Sheet এর ডাটা আনা (একবার)।"></p></div></a>
+      <a class="card app" style="--c:#7c3aed" href="/activity.html?app=core"><div class="ic">🕘</div><div><h3 data-i="Access log|অ্যাক্সেস লগ"></h3><p data-i="Who approved whom, app access, PIN, logo and SMS changes.|কে কাকে অনুমোদন দিল, অ্যাক্সেস, পিন, লোগো ও SMS পরিবর্তন।"></p></div></a>
+      <a class="card app" style="--c:#059669" href="/activity.html"><div class="ic">📜</div><div><h3 data-i="All activity|সব অ্যাক্টিভিটি"></h3><p data-i="Lifetime history of every app, with before → after.|সব অ্যাপের লাইফটাইম হিস্ট্রি, আগে → পরে।"></p></div></a>
+    </div>
+  </section>
+</main>
+<div id="modal" class="modal hidden"><div class="card" id="modalBody"></div></div>
+<div id="toast" class="toast hidden"></div>
+
+<script src="/assets/config.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script src="/assets/scs-core.js"></script>
+<script>
+(function () {
+  'use strict';
+  var $ = function (id) { return document.getElementById(id); };
+  var T = SCS.t, esc = SCS.esc, sb = SCS.sb;
+  var st = { status: 'pending', q: '', profiles: [], access: [], apps: [], pins: {}, me: null };
+  var tt = null;
+  function toast(t) { var e = $('toast'); e.textContent = t; e.classList.remove('hidden'); clearTimeout(tt); tt = setTimeout(function () { e.classList.add('hidden'); }, 3200); }
+  SCS.applyI18n(); SCS.applyLogo();
+  if (!SCS.configured) { location.href = '/'; return; }
+  SCS.loadBranding();
+
+  /* ---------- tabs ---------- */
+  var TABS = { users: 'tUsers', apps: 'tApps', brand: 'tBrand', sms: 'tSms', tools: 'tTools' };
+  function tab(k) {
+    Object.keys(TABS).forEach(function (x) { $(TABS[x]).classList.toggle('hidden', x !== k); });
+    document.querySelectorAll('#tabs button').forEach(function (b) { b.classList.toggle('on', b.dataset.tab === k); });
+    history.replaceState(null, '', '#' + k);
+    if (k === 'apps') loadApps();
+    if (k === 'sms') loadSms();
+  }
+  document.querySelectorAll('#tabs button').forEach(function (b) { b.onclick = function () { tab(b.dataset.tab); }; });
+
+  function modal(html) { $('modalBody').innerHTML = html; $('modal').classList.remove('hidden'); }
+  function closeModal() { $('modal').classList.add('hidden'); }
+  $('modal').addEventListener('click', function (e) { if (e.target === $('modal') || e.target.closest('[data-close]')) closeModal(); });
+
+  /* ---------- users ---------- */
+  function load() {
+    return Promise.all([
+      SCS.q(sb.from('profiles').select('*').order('created_at', { ascending: false })),
+      SCS.q(sb.from('app_access').select('*')),
+      SCS.q(sb.from('apps').select('*').order('sort_order'))
+    ]).then(function (r) { st.profiles = r[0]; st.access = r[1]; st.apps = r[2]; render(); });
+  }
+  function accessOf(uid) { var o = {}; st.access.forEach(function (a) { if (a.user_id === uid) o[a.app_key] = a.role; }); return o; }
+  function prof(uid) { return st.profiles.filter(function (p) { return p.id === uid; })[0]; }
+
+  function render() {
+    var pend = st.profiles.filter(function (p) { return p.status === 'pending'; }).length;
+    $('cPending').textContent = pend ? '(' + pend + ')' : '';
+    var q = st.q.toLowerCase();
+    var rows = st.profiles.filter(function (p) {
+      if (st.status !== 'all' && p.status !== st.status) return false;
+      return !q || [p.full_name, p.email, p.phone, p.employee_id, p.designation].join(' ').toLowerCase().indexOf(q) > -1;
+    });
+    if (!rows.length) { $('list').innerHTML = '<div class="empty">' + T('No users here.', 'কোনো ইউজার নেই।') + '</div>'; return; }
+    $('list').innerHTML = rows.map(function (p) {
+      var acc = accessOf(p.id), self = p.id === st.me.id;
+      var stBadge = { pending: 'warn', active: 'ok', disabled: 'bad' }[p.status];
+      var stTxt = { pending: T('pending', 'অপেক্ষমাণ'), active: T('active', 'সক্রিয়'), disabled: T('disabled', 'বন্ধ') }[p.status];
+      var apps = st.apps.map(function (a) {
+        var r = acc[a.key] || '';
+        return '<label class="pill"><input type="checkbox" data-acc="' + esc(a.key) + '" data-uid="' + p.id + '"' + (r ? ' checked' : '') + (p.is_super_admin ? ' disabled' : '') + ' /> ' + esc(a.icon || '') + ' ' + esc(a.name.replace(/^SCS /, '')) +
+          '<select data-role="' + esc(a.key) + '" data-uid="' + p.id + '"' + (!r || p.is_super_admin ? ' disabled' : '') + '><option value="user"' + (r === 'user' ? ' selected' : '') + '>User</option><option value="admin"' + (r === 'admin' ? ' selected' : '') + '>Admin</option></select></label>';
+      }).join('');
+      var btns = '';
+      if (p.status !== 'active') btns += '<button class="btn p s" data-st="active" data-uid="' + p.id + '">✔ ' + T('Approve', 'অনুমোদন') + '</button>';
+      if (p.status !== 'disabled' && !self) btns += '<button class="btn g s" data-st="disabled" data-uid="' + p.id + '">⛔ ' + T('Disable', 'বন্ধ') + '</button>';
+      btns += '<button class="btn g s" data-edit="' + p.id + '">✎ ' + T('Details', 'বিস্তারিত') + '</button>';
+      if (!self) btns += '<button class="btn g s" data-super="' + (p.is_super_admin ? '0' : '1') + '" data-uid="' + p.id + '">' + (p.is_super_admin ? T('Remove Super Admin', 'Super Admin বাদ') : '★ Super Admin') + '</button>';
+      var av = p.photo_url ? '<img class="av" src="' + esc(p.photo_url) + '" alt="" />' : '<div class="av">' + esc((p.full_name || p.email || '?').trim().charAt(0).toUpperCase()) + '</div>';
+      return '<div class="row">' + av +
+        '<div class="grow"><b>' + esc(p.full_name || '—') + '</b> ' + (p.is_super_admin ? '<span class="badge admin">Super Admin</span> ' : '') + '<span class="badge ' + stBadge + '">' + stTxt + '</span>' + (self ? ' <span class="badge">' + T('you', 'আপনি') + '</span>' : '') +
+        (p.employee_id ? ' <span class="badge user">' + esc(p.employee_id) + '</span>' : '') +
+        '<div class="small">' + esc(p.email) + (p.phone ? ' · ' + esc(p.phone) : '') + (p.designation ? ' · ' + esc(p.designation) : '') + ' · ' + T('joined', 'যোগদান') + ' ' + esc(SCS.fmt(p.created_at, 'd MMM yyyy')) + (p.photo_url ? '' : ' · <span style="color:var(--warn)">' + T('no photo', 'ছবি নেই') + '</span>') + '</div></div>' +
+        '<div class="acc">' + btns + '</div>' +
+        '<div class="acc" style="width:100%">' + (p.is_super_admin ? '<span class="small">' + T('Super Admin is Admin of every app.', 'Super Admin সব অ্যাপে Admin।') + '</span>' : apps) + '</div></div>';
+    }).join('');
+  }
+
+  function act(p, okText) {
+    return p.then(function () { if (okText) toast(okText); return load(); }).catch(function (e) { toast(SCS.err(e)); return load(); });
+  }
+
+  function editUser(uid) {
+    var p = prof(uid);
+    modal('<h2 class="h2">' + esc(p.full_name || p.email) + '</h2>' +
+      '<div class="row2"><div class="field"><label class="l">' + T('Full name', 'পূর্ণ নাম') + '</label><input class="in-f" id="eName" value="' + esc(p.full_name) + '" /></div>' +
+      '<div class="field"><label class="l">' + T('Mobile', 'মোবাইল') + '</label><input class="in-f" id="ePhone" value="' + esc(p.phone) + '" /></div></div>' +
+      '<div class="row2"><div class="field"><label class="l">' + T('Employee ID', 'এমপ্লয়ি আইডি') + '</label><input class="in-f" id="eEmp" value="' + esc(p.employee_id || '') + '" placeholder="' + T('auto (SCS-1xx)', 'অটো (SCS-1xx)') + '" /></div>' +
+      '<div class="field"><label class="l">' + T('Designation', 'পদবি') + '</label><input class="in-f" id="eDes" value="' + esc(p.designation) + '" /></div></div>' +
+      '<div class="field"><label class="l">' + T('Department', 'বিভাগ') + '</label><input class="in-f" id="eDep" value="' + esc(p.department) + '" /></div>' +
+      '<label class="switch" style="margin-bottom:8px"><input type="checkbox" id="eEmpOn"' + (p.is_employee ? ' checked' : '') + ' /> ' + T('Show in Employee Attendance (is an employee)', 'Employee Attendance এ দেখাবে (কর্মচারী)') + '</label>' +
+      '<p class="small" style="margin:4px 0 14px">' + T('Tip: to keep old attendance history, enter the same Employee ID the person had in the old attendance sheet (e.g. SCS-104).', 'টিপস: পুরনো হাজিরার ইতিহাস রাখতে পুরনো শিটে যে Employee ID ছিল সেটাই দিন (যেমন SCS-104)।') + '</p>' +
+      '<div class="h2" style="font-size:14px">' + T('Documents', 'ডকুমেন্ট') + '</div><div id="eDocs" class="docs" style="margin-bottom:16px"><div class="small">…</div></div>' +
+      '<div style="display:flex;gap:8px;justify-content:flex-end"><button class="btn g" data-close>' + T('Cancel', 'বাতিল') + '</button><button class="btn p" id="eSave">' + T('Save', 'সেভ') + '</button></div>');
+    $('eSave').onclick = function () {
+      var upd = { full_name: $('eName').value.trim(), phone: $('ePhone').value.trim(), employee_id: $('eEmp').value.trim() || null, designation: $('eDes').value.trim(), department: $('eDep').value.trim(), is_employee: $('eEmpOn').checked };
+      $('eSave').disabled = true;
+      SCS.q(sb.from('profiles').update(upd).eq('id', uid)).then(function () { closeModal(); toast(T('Saved', 'সেভ হয়েছে')); return load(); })
+        .catch(function (e) { $('eSave').disabled = false; toast(/duplicate|unique/i.test(SCS.err(e)) ? T('This Employee ID is already used by another account.', 'এই Employee ID অন্য অ্যাকাউন্টে আছে।') : SCS.err(e)); });
+    };
+    SCS.q(sb.from('profile_documents').select('*').eq('user_id', uid).order('created_at')).then(function (docs) {
+      var K = { nid_front: 'NID front', nid_back: 'NID back', certificate: 'Certificate', other: 'Other' };
+      if (!docs.length) { $('eDocs').innerHTML = '<div class="small">' + T('No documents uploaded.', 'কোনো ডকুমেন্ট আপলোড করা হয়নি।') + '</div>'; return; }
+      $('eDocs').innerHTML = docs.map(function (d) {
+        return '<div class="doc"><div class="th" data-th="' + esc(d.path) + '">' + (/pdf/.test(d.mime) ? '📄' : '🖼️') + '</div><b>' + esc(d.title || K[d.kind]) + '</b><button type="button" class="link" data-docopen="' + esc(d.path) + '" style="text-align:left;font-size:12px">' + T('Open', 'খুলুন') + '</button></div>';
+      }).join('');
+      docs.forEach(function (d) {
+        if (!/^image\//.test(d.mime)) return;
+        SCS.signedUrl(d.path, 3600).then(function (u) { var el = document.querySelector('[data-th="' + d.path + '"]'); if (el) { el.style.backgroundImage = 'url(\'' + u + '\')'; el.textContent = ''; } });
+      });
+    }).catch(function (e) { $('eDocs').innerHTML = '<div class="small">' + esc(SCS.err(e)) + '</div>'; });
+  }
+
+  document.addEventListener('click', function (e) {
+    var b = e.target.closest('button');
+    if (!b) return;
+    if (b.parentElement && b.parentElement.id === 'stTabs') {
+      st.status = b.dataset.s;
+      document.querySelectorAll('#stTabs button').forEach(function (x) { x.classList.toggle('on', x === b); });
+      render(); return;
+    }
+    if (b.dataset.docopen) { var w = window.open('', '_blank'); SCS.signedUrl(b.dataset.docopen, 600).then(function (u) { w.location = u; }).catch(function (er) { w.close(); toast(SCS.err(er)); }); return; }
+    if (b.dataset.edit) { editUser(b.dataset.edit); return; }
+    if (b.dataset.st) {
+      var s = b.dataset.st;
+      if (s === 'disabled' && !confirm(T('Disable this account? The person will not be able to open any app.', 'এই অ্যাকাউন্ট বন্ধ করবেন? সে আর কোনো অ্যাপে ঢুকতে পারবে না।'))) return;
+      act(SCS.q(sb.from('profiles').update({ status: s }).eq('id', b.dataset.uid)), s === 'active' ? T('Approved — now tick the apps this person can use', 'অনুমোদন দেওয়া হয়েছে — এখন অ্যাপের অ্যাক্সেস টিক দিন') : T('Account disabled', 'অ্যাকাউন্ট বন্ধ করা হয়েছে'));
+    }
+    if (b.dataset.super) {
+      var on = b.dataset.super === '1';
+      if (!confirm(on ? T('Make Super Admin? They will be Admin of every app and can manage users.', 'Super Admin বানালে সে সব অ্যাপে Admin হবে এবং ইউজার ম্যানেজ করতে পারবে। নিশ্চিত?') : T('Remove Super Admin rights?', 'Super Admin ক্ষমতা সরিয়ে নেবেন?'))) return;
+      var upd = { is_super_admin: on }; if (on) upd.status = 'active';
+      act(SCS.q(sb.from('profiles').update(upd).eq('id', b.dataset.uid)), T('Updated', 'আপডেট হয়েছে'));
+    }
+  });
+
+  document.addEventListener('change', function (e) {
+    var el = e.target;
+    if (el.dataset.acc) {
+      var uid = el.dataset.uid, app = el.dataset.acc, p0 = prof(uid);
+      if (el.checked) {
+        if (p0 && p0.status !== 'active' && !confirm(T('This account is not approved yet. Approve it too?', 'অ্যাকাউন্টটি এখনো অনুমোদিত নয়। অনুমোদনও দিয়ে দেবেন?'))) { el.checked = false; return; }
+        var p = SCS.q(sb.from('app_access').upsert({ user_id: uid, app_key: app, role: 'user' }));
+        if (p0 && p0.status !== 'active') p = p.then(function () { return SCS.q(sb.from('profiles').update({ status: 'active' }).eq('id', uid)); });
+        act(p, T('Access given', 'অ্যাক্সেস দেওয়া হয়েছে'));
+      } else {
+        act(SCS.q(sb.from('app_access').delete().eq('user_id', uid).eq('app_key', app)), T('Access removed', 'অ্যাক্সেস সরানো হয়েছে'));
+      }
+    }
+    if (el.dataset.role) {
+      act(SCS.q(sb.from('app_access').update({ role: el.value }).eq('user_id', el.dataset.uid).eq('app_key', el.dataset.role)), T('Role changed', 'রোল বদলানো হয়েছে'));
+    }
+  });
+  $('q').addEventListener('input', function (e) { st.q = e.target.value; render(); });
+
+  /* ---------- apps & PINs ---------- */
+  function loadApps() {
+    return Promise.all([
+      SCS.q(sb.from('apps').select('*').order('sort_order')),
+      SCS.q(sb.from('app_pins').select('*'))
+    ]).then(function (r) {
+      st.apps = r[0]; st.pins = {}; r[1].forEach(function (x) { st.pins[x.app_key] = x.pin; });
+      $('appList').innerHTML = st.apps.map(function (a) {
+        return '<div class="row"><div class="av" style="border-radius:14px;background:' + esc(a.color || '#e91e63') + ';color:#fff;font-size:20px">' + esc(a.icon || '📦') + '</div>' +
+          '<div class="grow"><b>' + esc(a.name) + '</b> ' + (a.active ? '' : '<span class="badge bad">' + T('hidden', 'লুকানো') + '</span>') +
+          '<div class="small">' + esc(a.key) + ' · ' + esc(a.path) + (a.description ? ' · ' + esc(a.description) : '') + '</div></div>' +
+          '<div class="acc"><span class="small">🔐 PIN</span><input class="in-f" style="width:110px;padding:7px 10px" type="password" autocomplete="off" inputmode="numeric" maxlength="4" data-pin="' + esc(a.key) + '" value="' + esc(st.pins[a.key] || '') + '" />' +
+          '<button class="btn g s" data-pinshow="' + esc(a.key) + '">👁</button><button class="btn p s" data-pinsave="' + esc(a.key) + '">' + T('Save PIN', 'পিন সেভ') + '</button>' +
+          '<button class="btn g s" data-appedit="' + esc(a.key) + '">✎ ' + T('Edit', 'এডিট') + '</button></div></div>';
+      }).join('') || '<div class="empty">—</div>';
+    }).catch(function (e) { $('appList').innerHTML = '<div class="empty">' + esc(SCS.err(e)) + '</div>'; });
+  }
+  function appForm(a) {
+    var isNew = !a; a = a || { key: '', name: 'SCS ', name_bn: '', description: '', path: '/apps/', icon: '📦', color: '#2563eb', sort_order: (st.apps.length + 1), active: true };
+    modal('<h2 class="h2">' + (isNew ? T('Add app', 'অ্যাপ যোগ করুন') : T('Edit app', 'অ্যাপ এডিট')) + '</h2>' +
+      '<div class="row2"><div class="field"><label class="l">Key</label><input class="in-f" id="aKey" value="' + esc(a.key) + '"' + (isNew ? ' placeholder="e.g. stock"' : ' readonly') + ' /></div>' +
+      '<div class="field"><label class="l">' + T('Path or link', 'পাথ বা লিংক') + '</label><input class="in-f" id="aPath" value="' + esc(a.path) + '" /></div></div>' +
+      '<div class="row2"><div class="field"><label class="l">' + T('Name', 'নাম') + '</label><input class="in-f" id="aName" value="' + esc(a.name) + '" /></div>' +
+      '<div class="field"><label class="l">' + T('Name (Bangla)', 'নাম (বাংলা)') + '</label><input class="in-f" id="aNameBn" value="' + esc(a.name_bn || '') + '" /></div></div>' +
+      '<div class="field"><label class="l">' + T('Short description', 'ছোট বিবরণ') + '</label><input class="in-f" id="aDesc" value="' + esc(a.description || '') + '" /></div>' +
+      '<div class="row2"><div class="field"><label class="l">' + T('Icon (emoji)', 'আইকন (ইমোজি)') + '</label><input class="in-f" id="aIcon" value="' + esc(a.icon || '') + '" /></div>' +
+      '<div class="field"><label class="l">' + T('Color', 'রং') + '</label><input class="in-f" id="aColor" type="color" value="' + esc(a.color || '#2563eb') + '" style="height:46px;padding:4px" /></div></div>' +
+      '<div class="row2"><div class="field"><label class="l">' + T('Order', 'ক্রম') + '</label><input class="in-f" id="aSort" type="number" value="' + esc(a.sort_order) + '" /></div>' +
+      '<div class="field" style="display:flex;align-items:end"><label class="switch"><input type="checkbox" id="aActive"' + (a.active ? ' checked' : '') + ' /> ' + T('Show on home page', 'হোম পেজে দেখাবে') + '</label></div></div>' +
+      '<div style="display:flex;gap:8px;justify-content:flex-end"><button class="btn g" data-close>' + T('Cancel', 'বাতিল') + '</button><button class="btn p" id="aSave">' + T('Save', 'সেভ') + '</button></div>');
+    $('aSave').onclick = function () {
+      var row = { key: $('aKey').value.trim().toLowerCase(), name: $('aName').value.trim(), name_bn: $('aNameBn').value.trim(), description: $('aDesc').value.trim(), path: $('aPath').value.trim(), icon: $('aIcon').value.trim() || '📦', color: $('aColor').value, sort_order: Number($('aSort').value) || 0, active: $('aActive').checked };
+      if (!/^[a-z0-9-]{2,40}$/.test(row.key)) { toast(T('Key: lowercase letters, numbers and - only', 'Key: শুধু ছোট হাতের অক্ষর, সংখ্যা ও -')); return; }
+      if (!row.name || !row.path) { toast(T('Name and path are required', 'নাম ও পাথ লাগবে')); return; }
+      SCS.q(isNew ? sb.from('apps').insert(row) : sb.from('apps').update(row).eq('key', row.key)).then(function () { closeModal(); toast(T('Saved', 'সেভ হয়েছে')); loadApps(); })
+        .catch(function (e) { toast(SCS.err(e)); });
+    };
+  }
+  $('addApp').onclick = function () { appForm(null); };
+  document.addEventListener('click', function (e) {
+    var b = e.target.closest('button'); if (!b) return;
+    if (b.dataset.appedit) appForm(st.apps.filter(function (a) { return a.key === b.dataset.appedit; })[0]);
+    if (b.dataset.pinshow) { var i = document.querySelector('[data-pin="' + b.dataset.pinshow + '"]'); i.type = i.type === 'password' ? 'text' : 'password'; }
+    if (b.dataset.pinsave) {
+      var k = b.dataset.pinsave, v = document.querySelector('[data-pin="' + k + '"]').value.trim();
+      if (!/^\d{4}$/.test(v)) { toast(T('PIN must be exactly 4 digits', 'পিন ঠিক ৪ সংখ্যার হতে হবে')); return; }
+      SCS.q(sb.from('app_pins').upsert({ app_key: k, pin: v })).then(function () { toast(T('Admin PIN saved', 'অ্যাডমিন পিন সেভ হয়েছে')); }).catch(function (er) { toast(SCS.err(er)); });
+    }
+  });
+
+  /* ---------- logo ---------- */
+  $('pickLogo').onclick = function () { $('fLogo').click(); };
+  $('fLogo').onchange = function () {
+    var f = this.files[0]; this.value = ''; if (!f) return;
+    if (f.size > 3 * 1024 * 1024) { toast(T('Logo must be under 3 MB', 'লোগো ৩ MB এর কম হতে হবে')); return; }
+    var ext = (f.name.split('.').pop() || 'png').toLowerCase().replace(/[^a-z]/g, '') || 'png';
+    toast(T('Uploading…', 'আপলোড হচ্ছে…'));
+    SCS.uploadPublic('branding/logo-' + Date.now() + '.' + ext, f, f.type).then(function (url) {
+      return SCS.q(sb.from('sys_settings').upsert({ key: 'branding', value: { logoUrl: url } })).then(function () { return url; });
+    }).then(function () { return SCS.loadBranding(); }).then(function () { toast(T('Logo updated everywhere', 'সব জায়গায় লোগো বদলে গেছে')); })
+      .catch(function (e) { toast(SCS.err(e)); });
+  };
+  $('resetLogo').onclick = function () {
+    if (!confirm(T('Use the default logo?', 'ডিফল্ট লোগো ব্যবহার করবেন?'))) return;
+    SCS.q(sb.from('sys_settings').upsert({ key: 'branding', value: { logoUrl: null } })).then(function () { return SCS.loadBranding(); })
+      .then(function () { toast(T('Default logo restored', 'ডিফল্ট লোগো ফিরে এসেছে')); }).catch(function (e) { toast(SCS.err(e)); });
+  };
+
+  /* ---------- SMS ---------- */
+  function loadSms() {
+    Promise.all([
+      SCS.q(sb.from('sys_settings').select('value').eq('key', 'sms').maybeSingle()),
+      SCS.q(sb.rpc('sys_secret_status'))
+    ]).then(function (r) {
+      var v = (r[0] && r[0].value) || {}, sec = r[1] || {}, p = v.params || {};
+      $('smsOn').checked = v.enabled !== false;
+      $('smsUrl').value = v.apiUrl || ''; $('smsSender').value = v.senderId || '';
+      $('prKey').value = p.apiKey || ''; $('prMsg').value = p.message || ''; $('prTo').value = p.to || ''; $('prSender').value = p.senderId || '';
+      $('smsKey').value = '';
+      $('smsKey').placeholder = sec.sms_api_key ? '•••••••• ' + T('(saved — leave blank to keep)', '(সেভ আছে — ফাঁকা রাখলে একই থাকবে)') : T('not set', 'সেট করা নেই');
+    }).catch(function (e) { $('smsMsg').innerHTML = '<div class="msg bad">' + esc(SCS.err(e)) + '</div>'; });
+  }
+  $('smsSave').onclick = function () {
+    var val = { enabled: $('smsOn').checked, apiUrl: $('smsUrl').value.trim(), senderId: $('smsSender').value.trim(),
+      params: { apiKey: $('prKey').value.trim() || undefined, message: $('prMsg').value.trim() || undefined, to: $('prTo').value.trim() || undefined, senderId: $('prSender').value.trim() || undefined } };
+    var key = $('smsKey').value.trim();
+    SCS.q(sb.from('sys_settings').upsert({ key: 'sms', value: JSON.parse(JSON.stringify(val)) }))
+      .then(function () { return key ? SCS.q(sb.rpc('sys_set_secret', { p_key: 'sms_api_key', p_value: key })) : null; })
+      .then(function () { toast(T('SMS settings saved', 'SMS সেটিংস সেভ হয়েছে')); loadSms(); })
+      .catch(function (e) { toast(SCS.err(e)); });
+  };
+  $('smsTest').onclick = function () {
+    var to = $('smsTo').value.trim(); if (!to) { toast(T('Enter a mobile number', 'মোবাইল নম্বর দিন')); return; }
+    $('smsTest').disabled = true;
+    SCS.callFn('password-reset', { action: 'test', to: to }).then(function () { toast(T('Test SMS sent', 'টেস্ট SMS পাঠানো হয়েছে')); })
+      .catch(function (e) { toast(SCS.err(e)); }).then(function () { $('smsTest').disabled = false; });
+  };
+
+  /* ---------- start ---------- */
+  SCS.loadMe().then(function (me) {
+    if (!me) { location.href = '/?next=/admin.html'; return; }
+    SCS.portalHeader(me, $('topAct'));
+    if (!me.isSuper) { document.querySelector('main').innerHTML = '<div class="empty">' + T('Only a Super Admin can open this page.', 'এই পেজ শুধু Super Admin দেখতে পারবেন।') + '</div>'; return; }
+    st.me = me;
+    var h = (location.hash || '').slice(1);
+    if (TABS[h] && h !== 'users') tab(h);
+    return load();
+  }).catch(function (e) { $('list').innerHTML = '<div class="empty">' + esc(SCS.err(e)) + '</div>'; });
+})();
+</script>
+</body>
+</html>

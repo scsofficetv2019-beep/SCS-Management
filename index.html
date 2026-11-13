@@ -1,0 +1,367 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>SCS Management</title>
+<meta name="description" content="Swarup Construction Solution — management apps" />
+<meta name="theme-color" content="#ffffff" />
+<link rel="icon" type="image/png" href="/assets/icon-192.png" />
+<link rel="apple-touch-icon" href="/assets/icon-192.png" />
+<link rel="manifest" href="/manifest.webmanifest" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Hind+Siliguri:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="/assets/portal.css" />
+</head>
+<body>
+<div class="bg-art" aria-hidden="true"><span class="ring r1"></span><span class="ring r2"></span><img data-scs-logo alt="" /></div>
+
+<header class="top">
+  <div class="in">
+    <a class="logo" href="/"><span class="mk"><img data-scs-logo alt="SCS" /></span><span><b>SCS Management</b><small>Swarup Construction Solution</small></span></a>
+    <div class="act" id="topAct"></div>
+  </div>
+</header>
+
+<div id="vLoading"><div class="spin" style="margin-top:120px"></div></div>
+
+<!-- not configured -->
+<section id="vSetup" class="auth one hidden">
+  <div class="card form">
+    <h2 class="h1" data-i="Setup pending|সেটআপ বাকি আছে"></h2>
+    <p class="sub" data-ih="Open <code>assets/config.js</code>, add your Supabase <b>URL</b> and <b>anon public key</b>, then deploy again.|ফাইল <code>assets/config.js</code> খুলে আপনার Supabase প্রজেক্টের <b>URL</b> ও <b>anon public key</b> বসিয়ে আবার ডিপ্লয় করুন।"></p>
+  </div>
+</section>
+
+<!-- login / signup / forgot -->
+<section id="vAuth" class="auth hidden">
+  <div class="hero">
+    <div class="big"><img data-scs-logo alt="SCS" /></div>
+    <h1>SCS <span>Management</span></h1>
+    <p data-i="One account for every SCS app.|এক অ্যাকাউন্টে সব SCS অ্যাপ।"></p>
+    <div class="apps-mini" id="heroApps"></div>
+  </div>
+  <div class="card form">
+    <div class="tabs" id="authTabs">
+      <button type="button" data-t="login" class="on" data-i="Log in|লগইন"></button>
+      <button type="button" data-t="signup" data-i="Create account|অ্যাকাউন্ট খুলুন"></button>
+    </div>
+    <div id="authMsg"></div>
+
+    <form id="fLogin" autocomplete="on">
+      <div class="field"><label class="l" for="liEmail" data-i="Email|ইমেইল"></label><input class="in-f" id="liEmail" type="email" autocomplete="email" required /></div>
+      <div class="field"><label class="l" for="liPass" data-i="Password|পাসওয়ার্ড"></label><input class="in-f" id="liPass" type="password" autocomplete="current-password" required /></div>
+      <button class="btn p w" type="submit" data-i="Log in|লগইন করুন"></button>
+      <div class="center" style="margin-top:14px"><button type="button" class="link" id="toForgot" data-i="Forgot password?|পাসওয়ার্ড ভুলে গেছেন?"></button></div>
+    </form>
+
+    <form id="fSignup" class="hidden" autocomplete="on">
+      <div class="field"><label class="l" for="suName"><span data-i="Full name|পূর্ণ নাম"></span> <span class="req">*</span></label><input class="in-f" id="suName" autocomplete="name" required /></div>
+      <div class="field"><label class="l" for="suPhone"><span data-i="Mobile number|মোবাইল নম্বর"></span> <span class="req">*</span></label><input class="in-f" id="suPhone" inputmode="tel" autocomplete="tel" placeholder="01XXXXXXXXX" required /></div>
+      <div class="field"><label class="l" for="suEmail"><span data-i="Email|ইমেইল"></span> <span class="req">*</span></label><input class="in-f" id="suEmail" type="email" autocomplete="email" required /></div>
+      <div class="row2">
+        <div class="field"><label class="l" for="suPass" data-i="Password (min 8)|পাসওয়ার্ড (৮+ অক্ষর)"></label><input class="in-f" id="suPass" type="password" minlength="8" autocomplete="new-password" required /></div>
+        <div class="field"><label class="l" for="suPass2" data-i="Confirm password|আবার দিন"></label><input class="in-f" id="suPass2" type="password" minlength="8" autocomplete="new-password" required /></div>
+      </div>
+      <button class="btn p w" type="submit" data-i="Create account|অ্যাকাউন্ট খুলুন"></button>
+      <p class="small center" style="margin:12px 0 0" data-i="After you log in you will add your photo. The admin then approves your account and gives app access.|লগইনের পর প্রোফাইল ছবি দেবেন। তারপর অ্যাডমিন অনুমোদন ও অ্যাপের অ্যাক্সেস দেবেন।"></p>
+    </form>
+
+    <!-- forgot: step 1 -->
+    <form id="fForgot" class="hidden">
+      <h2 class="h2" data-i="Reset password|পাসওয়ার্ড রিসেট"></h2>
+      <div class="tabs" id="fgTabs" style="margin-bottom:14px">
+        <button type="button" data-m="email" class="on" data-i="By email|ইমেইলে"></button>
+        <button type="button" data-m="sms" data-i="By mobile SMS|মোবাইল SMS এ"></button>
+      </div>
+      <div class="field" id="fgEmailBox"><label class="l" for="fgEmail" data-i="Your account email|আপনার অ্যাকাউন্টের ইমেইল"></label><input class="in-f" id="fgEmail" type="email" autocomplete="email" /></div>
+      <div class="field hidden" id="fgPhoneBox"><label class="l" for="fgPhone" data-i="Mobile number on your account|অ্যাকাউন্টের মোবাইল নম্বর"></label><input class="in-f" id="fgPhone" inputmode="tel" placeholder="01XXXXXXXXX" /></div>
+      <button class="btn p w" type="submit" data-i="Send reset code|রিসেট কোড পাঠান"></button>
+      <div class="center" style="margin-top:14px"><button type="button" class="link" data-back data-i="← Back to log in|← লগইনে ফিরুন"></button></div>
+    </form>
+
+    <!-- forgot: step 2 -->
+    <form id="fCode" class="hidden">
+      <h2 class="h2" data-i="Enter the code|কোড দিন"></h2>
+      <p class="small" id="codeInfo" style="margin-top:-4px"></p>
+      <div class="field"><label class="l" for="cdCode" data-i="6-digit code|৬ সংখ্যার কোড"></label><input class="in-f otp" id="cdCode" inputmode="numeric" autocomplete="one-time-code" maxlength="8" required /></div>
+      <div class="row2">
+        <div class="field"><label class="l" for="cdPass" data-i="New password|নতুন পাসওয়ার্ড"></label><input class="in-f" id="cdPass" type="password" minlength="8" autocomplete="new-password" required /></div>
+        <div class="field"><label class="l" for="cdPass2" data-i="Confirm|আবার দিন"></label><input class="in-f" id="cdPass2" type="password" minlength="8" autocomplete="new-password" required /></div>
+      </div>
+      <button class="btn p w" type="submit" data-i="Save new password|নতুন পাসওয়ার্ড সেভ করুন"></button>
+      <div class="center" style="margin-top:14px;display:flex;justify-content:center;gap:16px">
+        <button type="button" class="link" id="resend" data-i="Send again|আবার পাঠান"></button>
+        <button type="button" class="link" data-back data-i="← Back to log in|← লগইনে ফিরুন"></button>
+      </div>
+    </form>
+  </div>
+</section>
+
+<!-- set new password (from reset email link) -->
+<section id="vReset" class="auth one hidden">
+  <div class="card form">
+    <h2 class="h1" data-i="Set a new password|নতুন পাসওয়ার্ড দিন"></h2>
+    <div id="resetMsg"></div>
+    <form id="fReset">
+      <div class="field"><label class="l" for="rpPass" data-i="New password|নতুন পাসওয়ার্ড"></label><input class="in-f" id="rpPass" type="password" minlength="8" autocomplete="new-password" required /></div>
+      <div class="field"><label class="l" for="rpPass2" data-i="Confirm|আবার দিন"></label><input class="in-f" id="rpPass2" type="password" minlength="8" autocomplete="new-password" required /></div>
+      <button class="btn p w" type="submit" data-i="Save password|পাসওয়ার্ড সেভ করুন"></button>
+    </form>
+  </div>
+</section>
+
+<!-- pending / disabled -->
+<section id="vPending" class="auth one hidden">
+  <div class="card form center">
+    <div style="font-size:46px">⏳</div>
+    <h2 class="h1" id="pendTitle"></h2>
+    <p class="sub" id="pendText"></p>
+    <p class="small" id="pendWho"></p>
+    <div style="display:flex;gap:8px;justify-content:center;margin-top:14px;flex-wrap:wrap">
+      <a class="btn g" href="/profile.html" data-i="My profile|আমার প্রোফাইল"></a>
+      <button class="btn g" type="button" onclick="location.reload()" data-i="Refresh|রিফ্রেশ"></button>
+      <button class="btn p" type="button" data-logout data-i="Log out|লগআউট"></button>
+    </div>
+  </div>
+</section>
+
+<!-- dashboard -->
+<main id="vHome" class="wrap hidden">
+  <div class="welcome">
+    <img class="av-l" id="hAvatar" alt="" />
+    <div class="grow"><div class="small" id="hDate"></div><h1 class="h1" id="hello"></h1></div>
+  </div>
+  <div class="home-grid">
+    <section>
+      <div class="grid" id="appGrid"></div>
+    </section>
+    <aside class="card feed">
+      <div class="card-hd"><b data-i="Recent activity|সাম্প্রতিক অ্যাক্টিভিটি"></b><a class="link" href="/activity.html" data-i="View all →|সব দেখুন →"></a></div>
+      <div id="feed"><div class="spin" style="margin:24px auto"></div></div>
+    </aside>
+  </div>
+</main>
+
+<div id="toast" class="toast hidden"></div>
+
+<script src="/assets/config.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script src="/assets/scs-core.js"></script>
+<script>
+(function () {
+  'use strict';
+  var $ = function (id) { return document.getElementById(id); };
+  var T = SCS.t, esc = SCS.esc;
+  var VIEWS = ['vLoading', 'vSetup', 'vAuth', 'vReset', 'vPending', 'vHome'];
+  function show(v) { VIEWS.forEach(function (x) { $(x).classList.toggle('hidden', x !== v); }); }
+  function msg(el, text, type) { $(el).innerHTML = text ? '<div class="msg ' + (type || 'info') + '">' + esc(text) + '</div>' : ''; }
+  var tt = null;
+  function toast(t) { var e = $('toast'); e.textContent = t; e.classList.remove('hidden'); clearTimeout(tt); tt = setTimeout(function () { e.classList.add('hidden'); }, 3200); }
+  var next = new URLSearchParams(location.search).get('next');
+  if (next && !/^\/[^/]/.test(next)) next = null;
+
+  SCS.applyI18n(); SCS.applyLogo();
+  function langSwitch() {
+    return '<div class="seg"><button type="button" data-lang="en" class="' + (SCS.lang === 'en' ? 'on' : '') + '">EN</button><button type="button" data-lang="bn" class="' + (SCS.lang === 'bn' ? 'on' : '') + '">বাং</button></div>';
+  }
+  document.addEventListener('click', function (e) {
+    var b = e.target.closest('.seg [data-lang]');
+    if (b) { SCS.setLang(b.getAttribute('data-lang')); $('topAct').innerHTML = langSwitch(); }
+  });
+
+  if (!SCS.configured) { $('topAct').innerHTML = langSwitch(); show('vSetup'); return; }
+  var sb = SCS.sb, recovering = false;
+  SCS.loadBranding();
+
+  /* ---------- auth forms ---------- */
+  function authTab(t) {
+    document.querySelectorAll('#authTabs button').forEach(function (b) { b.classList.toggle('on', b.dataset.t === t); });
+    $('authTabs').classList.toggle('hidden', t === 'forgot' || t === 'code');
+    $('fLogin').classList.toggle('hidden', t !== 'login');
+    $('fSignup').classList.toggle('hidden', t !== 'signup');
+    $('fForgot').classList.toggle('hidden', t !== 'forgot');
+    $('fCode').classList.toggle('hidden', t !== 'code');
+    msg('authMsg', '');
+  }
+  document.querySelectorAll('#authTabs button').forEach(function (b) { b.onclick = function () { authTab(b.dataset.t); }; });
+  $('toForgot').onclick = function () { $('fgEmail').value = $('liEmail').value; authTab('forgot'); };
+  document.querySelectorAll('[data-back]').forEach(function (b) { b.onclick = function () { authTab('login'); }; });
+  function busy(form, on) { form.querySelectorAll('button').forEach(function (b) { b.disabled = on; }); }
+
+  $('fLogin').onsubmit = function (e) {
+    e.preventDefault(); var f = e.target; busy(f, true); msg('authMsg', '');
+    sb.auth.signInWithPassword({ email: $('liEmail').value.trim(), password: $('liPass').value }).then(function (r) {
+      busy(f, false);
+      if (r.error) { msg('authMsg', /Invalid login/i.test(r.error.message) ? T('Wrong email or password.', 'ইমেইল বা পাসওয়ার্ড ভুল।') : /confirm/i.test(r.error.message) ? T('Email not confirmed yet — click the confirmation link in your inbox.', 'ইমেইল এখনো কনফার্ম করা হয়নি — ইনবক্সে কনফার্মেশন লিংকে ক্লিক করুন।') : r.error.message, 'bad'); return; }
+      route();
+    });
+  };
+
+  $('fSignup').onsubmit = function (e) {
+    e.preventDefault(); var f = e.target;
+    if ($('suPass').value !== $('suPass2').value) { msg('authMsg', T('The two passwords do not match.', 'দুটি পাসওয়ার্ড মিলছে না।'), 'bad'); return; }
+    if (!/^(\+?88)?01[3-9]\d{8}$/.test($('suPhone').value.replace(/[\s-]/g, ''))) { msg('authMsg', T('Enter a valid mobile number (01XXXXXXXXX).', 'সঠিক মোবাইল নম্বর দিন (01XXXXXXXXX)।'), 'bad'); return; }
+    busy(f, true); msg('authMsg', '');
+    sb.auth.signUp({
+      email: $('suEmail').value.trim(), password: $('suPass').value,
+      options: { data: { full_name: $('suName').value.trim(), phone: $('suPhone').value.replace(/[\s-]/g, '') }, emailRedirectTo: location.origin + '/' }
+    }).then(function (r) {
+      busy(f, false);
+      if (r.error) { msg('authMsg', /registered/i.test(r.error.message) ? T('An account with this email already exists — log in.', 'এই ইমেইলে আগেই অ্যাকাউন্ট আছে — লগইন করুন।') : r.error.message, 'bad'); return; }
+      if (r.data && r.data.session) { route(); return; }
+      authTab('login');
+      $('liEmail').value = $('suEmail').value.trim();
+      msg('authMsg', T('Account created! Click the confirmation link we emailed you, then log in.', 'অ্যাকাউন্ট তৈরি হয়েছে! ইমেইলে পাঠানো কনফার্মেশন লিংকে ক্লিক করুন, তারপর লগইন করুন।'), 'ok');
+    });
+  };
+
+  /* ---------- forgot password (email code / link, or mobile SMS code) ---------- */
+  var fg = { mode: 'email', email: '', phone: '' };
+  document.querySelectorAll('#fgTabs button').forEach(function (b) {
+    b.onclick = function () {
+      fg.mode = b.dataset.m;
+      document.querySelectorAll('#fgTabs button').forEach(function (x) { x.classList.toggle('on', x === b); });
+      $('fgEmailBox').classList.toggle('hidden', fg.mode !== 'email');
+      $('fgPhoneBox').classList.toggle('hidden', fg.mode !== 'sms');
+      msg('authMsg', '');
+    };
+  });
+  function sendCode() {
+    if (fg.mode === 'email') {
+      return sb.auth.resetPasswordForEmail(fg.email, { redirectTo: location.origin + '/' }).then(function (r) {
+        if (r.error) throw r.error;
+        return T('We emailed a 6-digit code to ', '৬ সংখ্যার কোড পাঠানো হয়েছে: ') + fg.email + T('. (You can also just click the link in that email.)', '। (ইমেইলের লিংকে ক্লিক করেও রিসেট করা যায়।)');
+      });
+    }
+    return SCS.callFn('password-reset', { action: 'send', phone: fg.phone }, { anon: true }).then(function (r) {
+      return T('We sent a 6-digit code by SMS to ', '৬ সংখ্যার কোড SMS এ পাঠানো হয়েছে: ') + r.to;
+    });
+  }
+  $('fForgot').onsubmit = function (e) {
+    e.preventDefault(); var f = e.target;
+    fg.email = $('fgEmail').value.trim(); fg.phone = $('fgPhone').value.trim();
+    if (fg.mode === 'email' && !fg.email) { msg('authMsg', T('Enter your email.', 'ইমেইল দিন।'), 'bad'); return; }
+    if (fg.mode === 'sms' && !fg.phone) { msg('authMsg', T('Enter your mobile number.', 'মোবাইল নম্বর দিন।'), 'bad'); return; }
+    busy(f, true); msg('authMsg', '');
+    sendCode().then(function (info) {
+      busy(f, false); authTab('code'); $('codeInfo').textContent = info; $('cdCode').focus();
+    }).catch(function (er) { busy(f, false); msg('authMsg', SCS.err(er), 'bad'); });
+  };
+  $('resend').onclick = function () {
+    msg('authMsg', '');
+    sendCode().then(function (info) { $('codeInfo').textContent = info; toast(T('Code sent again', 'কোড আবার পাঠানো হয়েছে')); }).catch(function (er) { msg('authMsg', SCS.err(er), 'bad'); });
+  };
+  $('fCode').onsubmit = function (e) {
+    e.preventDefault(); var f = e.target;
+    var code = $('cdCode').value.replace(/\D/g, ''), pass = $('cdPass').value;
+    if (pass !== $('cdPass2').value) { msg('authMsg', T('The two passwords do not match.', 'দুটি পাসওয়ার্ড মিলছে না।'), 'bad'); return; }
+    busy(f, true); msg('authMsg', '');
+    var p;
+    if (fg.mode === 'email') {
+      p = sb.auth.verifyOtp({ email: fg.email, token: code, type: 'recovery' }).then(function (r) {
+        if (r.error) throw new Error(/expired|invalid/i.test(r.error.message) ? T('Wrong or expired code.', 'কোড ভুল বা মেয়াদ শেষ।') : r.error.message);
+        return sb.auth.updateUser({ password: pass });
+      }).then(function (r) { if (r.error) throw r.error; });
+    } else {
+      p = SCS.callFn('password-reset', { action: 'verify', phone: fg.phone, code: code, password: pass }, { anon: true }).then(function (r) {
+        return sb.auth.signInWithPassword({ email: r.email, password: pass });
+      });
+    }
+    p.then(function () {
+      busy(f, false); toast(T('Password changed', 'পাসওয়ার্ড বদলানো হয়েছে')); route();
+    }).catch(function (er) { busy(f, false); msg('authMsg', SCS.err(er), 'bad'); });
+  };
+
+  $('fReset').onsubmit = function (e) {
+    e.preventDefault();
+    if ($('rpPass').value !== $('rpPass2').value) { msg('resetMsg', T('The two passwords do not match.', 'দুটি পাসওয়ার্ড মিলছে না।'), 'bad'); return; }
+    sb.auth.updateUser({ password: $('rpPass').value }).then(function (r) {
+      if (r.error) { msg('resetMsg', r.error.message, 'bad'); return; }
+      recovering = false; toast(T('Password changed', 'পাসওয়ার্ড বদলানো হয়েছে')); history.replaceState(null, '', '/'); route();
+    });
+  };
+
+  document.addEventListener('click', function (e) { if (e.target.closest('[data-logout]')) SCS.signOut(); });
+
+  /* ---------- top bar ---------- */
+  function topBar(me) {
+    $('topAct').innerHTML = '';
+    if (!me) { $('topAct').innerHTML = langSwitch(); return; }
+    SCS.portalHeader(me, $('topAct'));
+  }
+
+  /* ---------- home ---------- */
+  var ACT_IC = { Add: '+', Edit: '✎', Delete: '−' };
+  function renderHome(me) {
+    var h = Number(SCS.fmt(new Date(), 'HH'));
+    var greet = h < 12 ? T('Good morning', 'শুভ সকাল') : h < 17 ? T('Good afternoon', 'শুভ অপরাহ্ন') : T('Good evening', 'শুভ সন্ধ্যা');
+    $('hello').textContent = greet + ', ' + me.name.split(' ')[0];
+    $('hDate').textContent = new Intl.DateTimeFormat(SCS.lang === 'bn' ? 'bn-BD' : 'en-GB', { timeZone: 'Asia/Dhaka', weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }).format(new Date());
+    $('hAvatar').src = me.photo || SCS.logo;
+    var apps = me.apps.slice().sort(function (a, b) { return (SCS.roleFor(me, b.key) ? 1 : 0) - (SCS.roleFor(me, a.key) ? 1 : 0); });
+    $('appGrid').innerHTML = apps.map(function (a) {
+      var role = SCS.roleFor(me, a.key);
+      var nm = SCS.lang === 'bn' && a.name_bn ? a.name_bn : a.name;
+      var ext = /^https?:/i.test(a.path || '');
+      return '<a class="card app' + (role ? '' : ' off') + '" style="--c:' + esc(a.color || '#e91e63') + '" href="' + (role ? esc(a.path) : '#') + '"' + (ext ? ' target="_blank" rel="noopener"' : '') + '>' +
+        '<div class="ic">' + esc(a.icon || '📦') + '</div>' +
+        '<div><h3>' + esc(nm) + '</h3><p>' + esc(a.description || '') + '</p></div>' +
+        '<div class="ft">' + (role ? '<span class="badge ' + role + '">' + role + '</span><span class="go">→</span>' : '<span class="badge">🔒 ' + T('No access', 'অ্যাক্সেস নেই') + '</span>') + '</div></a>';
+    }).join('') || '<div class="empty">' + T('No apps yet.', 'কোনো অ্যাপ নেই।') + '</div>';
+    loadFeed(me);
+  }
+  function loadFeed(me) {
+    var names = {}; me.apps.forEach(function (a) { names[a.key] = a; });
+    SCS.q(sb.from('audit_log').select('id,at,app_key,entity,record_ref,action,actor_name').neq('app_key', 'core').order('id', { ascending: false }).limit(10)).then(function (rows) {
+      $('feed').innerHTML = rows.length ? rows.map(function (r) {
+        var a = names[r.app_key] || {};
+        return '<a class="it" href="/activity.html?app=' + encodeURIComponent(r.app_key) + '"><span class="dot ' + esc(r.action) + '">' + (ACT_IC[r.action] || '•') + '</span><div style="min-width:0"><b>' + esc((r.entity || '') + ' ' + (r.record_ref || '')) + '</b>' +
+          '<p>' + esc(r.actor_name || 'System') + ' · ' + esc(a.icon || '') + ' ' + esc((a.name || r.app_key).replace(/^SCS /, '')) + ' · ' + esc(SCS.ago(r.at)) + '</p></div></a>';
+      }).join('') : '<div class="empty" style="padding:24px">' + T('No activity yet.', 'এখনো কোনো অ্যাক্টিভিটি নেই।') + '</div>';
+    }).catch(function () { $('feed').innerHTML = '<div class="empty" style="padding:24px">—</div>'; });
+  }
+
+  /* ---------- router ---------- */
+  function route() {
+    if (recovering) { show('vReset'); return; }
+    show('vLoading');
+    SCS.loadMe().then(function (me) {
+      topBar(me);
+      if (!me) {
+        sb.from('apps').select('icon').eq('active', true).order('sort_order').then(function (r) {
+          $('heroApps').innerHTML = ((r && r.data) || []).map(function (a) { return '<span>' + esc(a.icon || '📦') + '</span>'; }).join('');
+        });
+        show('vAuth'); return;
+      }
+      if (me.profile.status === 'disabled') {
+        $('pendTitle').textContent = T('Account disabled', 'অ্যাকাউন্ট বন্ধ');
+        $('pendText').textContent = T('Your account has been disabled by the admin.', 'আপনার অ্যাকাউন্টটি অ্যাডমিন বন্ধ করে রেখেছেন।');
+        $('pendWho').textContent = me.email; show('vPending'); return;
+      }
+      if (!me.complete) { location.replace('/profile.html' + (next ? '?next=' + encodeURIComponent(next) : '')); return; }
+      if (!me.active) {
+        $('pendTitle').textContent = T('Waiting for approval', 'অনুমোদনের অপেক্ষায়');
+        $('pendText').textContent = T('Your account is ready. When the admin approves it and gives app access, your apps will appear here.', 'আপনার অ্যাকাউন্ট তৈরি হয়েছে। অ্যাডমিন অনুমোদন দিয়ে অ্যাপের অ্যাক্সেস দিলে এখানে অ্যাপগুলো দেখতে পাবেন।');
+        $('pendWho').textContent = me.email; show('vPending'); return;
+      }
+      if (next) {
+        var key = (next.match(/^\/apps\/([^/]+)/) || [])[1];
+        if (!key || SCS.roleFor(me, key)) { location.replace(next); return; }
+      }
+      renderHome(me); show('vHome');
+    }).catch(function (e) { topBar(null); show('vAuth'); msg('authMsg', SCS.err(e), 'bad'); });
+  }
+
+  sb.auth.onAuthStateChange(function (ev) {
+    if (ev === 'PASSWORD_RECOVERY') { recovering = true; show('vReset'); }
+  });
+  if (/type=recovery/.test(location.hash)) recovering = true;
+  var hashErr = /error_description=([^&]+)/.exec(location.hash);
+  route();
+  if (hashErr) { setTimeout(function () { msg('authMsg', decodeURIComponent(hashErr[1].replace(/\+/g, ' ')) + T(' — ask for a new code below.', ' — নিচে থেকে নতুন কোড নিন।'), 'bad'); authTab('forgot'); }, 400); history.replaceState(null, '', '/'); }
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="bn">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Data Migration</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="/assets/portal.css" />
+</head>
+<body>
+<header class="top">
+  <div class="in">
+    <a class="logo" href="/"><span class="mk"><img data-scs-logo alt="SCS" /></span><span><b>Data Migration</b><small>Google Sheets → Supabase</small></span></a>
+    <div class="act"><a class="chip" href="/admin.html">🛡️ <span class="hide-sm">Admin Console</span></a></div>
+  </div>
+</header>
+<main class="wrap" style="max-width:860px">
+  <h1 class="h1">পুরনো Google Sheet থেকে ডাটা আনা</h1>
+  <p class="sub">একবারই করতে হবে। শুধু Super Admin।</p>
+
+  <div class="card pad" style="margin-bottom:14px">
+    <h3 style="margin-top:0">🧪 Chemical Order ও 📊 Monthly Report</h3>
+    <p class="small" style="font-size:14px;line-height:1.7">
+      এই দুই অ্যাপের ভেতরেই ব্যাকআপ/রিস্টোর আছে:<br>
+      <b>Chemical Order:</b> পুরনো অ্যাপে Admin → Backup &amp; Restore → <i>Lifetime</i> ব্যাকআপ ডাউনলোড → নতুন অ্যাপে একই জায়গায় <i>Restore from JSON</i>।<br>
+      <b>Monthly Report:</b> পুরনো অ্যাপের Admin → Backup থেকে সম্পূর্ণ ব্যাকআপ (JSON) ডাউনলোড → নতুন অ্যাপে একই জায়গায় Restore।
+    </p>
+  </div>
+
+  <div class="card pad">
+    <h3 style="margin-top:0">🕘 Employee Attendance (CSV)</h3>
+    <p class="small" style="font-size:14px;line-height:1.7">
+      পুরনো Attendance গুগল শিটে <b>Employees</b> ট্যাব খুলে <i>File → Download → CSV</i> করুন, তারপর <b>Attendance</b> ট্যাবও একইভাবে CSV করুন। নিচে ফাইল দুটি দিন।
+      একই ID আগে থাকলে আপডেট হবে, ডুপ্লিকেট হবে না।
+    </p>
+    <div class="field"><label class="l">Employees.csv (ID, EmpID, Name, Designation, Department, Mobile, PhotoUrl, SortOrder)</label><input type="file" id="fEmp" accept=".csv,text/csv" class="in-f" /></div>
+    <div class="field"><label class="l">Attendance.csv (ID, EmpID, Date, Type, Time, Lat, Lng, LocationText, Note, CreatedBy)</label><input type="file" id="fAtt" accept=".csv,text/csv" class="in-f" /></div>
+    <button class="btn p" id="go" type="button">ইমপোর্ট করুন</button>
+    <div id="out" style="margin-top:14px"></div>
+  </div>
+</main>
+
+<script src="/assets/config.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script src="/assets/scs-core.js"></script>
+<script src="/apps/attendance/backend.js"></script>
+<script>
+(function () {
+  'use strict';
+  var $ = function (id) { return document.getElementById(id); };
+  var sb = SCS.sb;
+  function log(t, type) { $('out').insertAdjacentHTML('beforeend', '<div class="msg ' + (type || 'info') + '">' + SCS.esc(t) + '</div>'); }
+
+  function parseCsv(text) {
+    var rows = [], row = [], f = '', q = false;
+    text = text.replace(/^﻿/, '');
+    for (var i = 0; i < text.length; i++) {
+      var c = text[i];
+      if (q) { if (c === '"') { if (text[i + 1] === '"') { f += '"'; i++; } else q = false; } else f += c; }
+      else if (c === '"') q = true;
+      else if (c === ',') { row.push(f); f = ''; }
+      else if (c === '\n' || c === '\r') { if (c === '\r' && text[i + 1] === '\n') i++; row.push(f); rows.push(row); row = []; f = ''; }
+      else f += c;
+    }
+    if (f !== '' || row.length) { row.push(f); rows.push(row); }
+    return rows.filter(function (r) { return r.some(function (x) { return String(x).trim() !== ''; }); });
+  }
+  function readFile(inp) {
+    var f = inp.files[0];
+    if (!f) return Promise.resolve(null);
+    return f.text().then(parseCsv);
+  }
+  function col(h, names, def) {
+    var lo = h.map(function (x) { return String(x).trim().toLowerCase().replace(/\s+/g, ''); });
+    for (var i = 0; i < names.length; i++) { var k = lo.indexOf(names[i]); if (k > -1) return k; }
+    return def;
+  }
+  function normDate(v) {
+    v = String(v || '').trim();
+    var m = v.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/); if (m) return m[1] + '-' + ('0' + m[2]).slice(-2) + '-' + ('0' + m[3]).slice(-2);
+    m = v.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/); if (m) return m[3] + '-' + ('0' + m[1]).slice(-2) + '-' + ('0' + m[2]).slice(-2);
+    return v;
+  }
+  function chunks(list, n, fn) {
+    var p = Promise.resolve();
+    for (var i = 0; i < list.length; i += n) (function (part) { p = p.then(function () { return fn(part); }); })(list.slice(i, i + n));
+    return p;
+  }
+
+  $('go').onclick = function () {
+    $('out').innerHTML = ''; $('go').disabled = true;
+    Promise.all([readFile($('fEmp')), readFile($('fAtt'))]).then(function (r) {
+      var emp = r[0], att = r[1], p = Promise.resolve();
+      if (emp && emp.length > 1) {
+        var h = emp[0], I = { id: col(h, ['id', 'sl'], 0), emp: col(h, ['empid', 'employeeid'], 1), name: col(h, ['name', 'employeename'], 2), des: col(h, ['designation'], 3), dep: col(h, ['department'], 4), mob: col(h, ['mobile', 'phone'], 5), ph: col(h, ['photourl', 'photo'], 6) };
+        var rows = emp.slice(1).map(function (x, i) {
+          return { id: String(x[I.id] || ('emp-' + (i + 1))).trim(), emp_id: String(x[I.emp] || ('SCS-' + (101 + i))).trim(), name: String(x[I.name] || '').trim(), designation: String(x[I.des] || ''), department: String(x[I.dep] || ''), mobile: String(x[I.mob] || ''), photo_url: String(x[I.ph] || ''), sort_order: i + 1 };
+        }).filter(function (x) { return x.name || x.emp_id; });
+        p = p.then(function () { return chunks(rows, 300, function (part) { return SCS.q(sb.from('att_employees').upsert(part)); }); }).then(function () { log('Employees: ' + rows.length + ' জন ইমপোর্ট হয়েছে', 'ok'); });
+      }
+      if (att && att.length > 1) {
+        var a = att[0], J = { id: col(a, ['id'], 0), emp: col(a, ['empid'], 1), date: col(a, ['date'], 2), type: col(a, ['type'], 3), time: col(a, ['time'], 4), lat: col(a, ['lat'], 5), lng: col(a, ['lng'], 6), loc: col(a, ['locationtext', 'location'], 7), note: col(a, ['note'], 8), by: col(a, ['createdby'], 9) };
+        var recs = att.slice(1).map(function (x, i) {
+          return { id: String(x[J.id] || ('att-import-' + i)).trim(), emp_id: String(x[J.emp] || '').trim(), date: normDate(x[J.date]), type: /out/i.test(x[J.type]) ? 'Clock Out' : 'Clock IN', time: String(x[J.time] || ''), lat: Number(x[J.lat]) || 0, lng: Number(x[J.lng]) || 0, location_text: String(x[J.loc] || ''), note: String(x[J.note] || ''), created_by_label: /admin/i.test(x[J.by]) ? 'admin' : 'user' };
+        }).filter(function (x) { return x.emp_id && x.date; });
+        p = p.then(function () { return chunks(recs, 500, function (part) { return SCS.q(sb.from('att_records').upsert(part)); }); }).then(function () { log('Attendance: ' + recs.length + ' টি রেকর্ড ইমপোর্ট হয়েছে। মাসিক সামারি তৈরি হচ্ছে...', 'ok'); });
+      }
+      if ((emp && emp.length > 1) || (att && att.length > 1)) {
+        p = p.then(function () { return window.SCS_BACKEND.rebuildAllSummaries(); }).then(function (n) { log(n + ' মাসের অ্যাটেন্ডেন্স সামারি তৈরি হয়েছে — Monthly Report এখন এগুলো দেখাবে।', 'ok'); });
+      }
+      if (!emp && !att) log('কোনো ফাইল দেওয়া হয়নি।', 'bad');
+      return p;
+    }).catch(function (e) { log(SCS.err(e), 'bad'); }).then(function () { $('go').disabled = false; });
+  };
+
+  SCS.applyLogo(); SCS.loadBranding();
+  SCS.loadMe().then(function (me) {
+    if (!me) { location.href = '/?next=/migrate.html'; return; }
+    if (me.isSuper) { SCS.role = 'admin'; window.SCS_ROLE = 'admin'; SCS.adminUnlocked = true; }
+    if (!me.isSuper) { document.querySelector('main').innerHTML = '<div class="empty">শুধু Super Admin এই পেজ ব্যবহার করতে পারবেন।</div>'; }
+  });
+})();
+</script>
+</body>
+</html>
