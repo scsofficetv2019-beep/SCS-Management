@@ -872,6 +872,6 @@ update public.profiles set is_employee = is_employee where status = 'active';
 --  (লাইনের শুরুতে -- থাকলে সেটা চলে না — New query তে -- ছাড়া পেস্ট করুন)
 --
 --  insert into public.profiles (id, email, status, is_super_admin)
---  select id, email, 'active', true from auth.users where lower(email) = lower('your-email@example.com')
+--  select id, email, 'active', true from auth.users where lower(email) = lower('scssouravmridha@gmail.com')
 --  on conflict (id) do update set status = 'active', is_super_admin = true;
 -- =====================================================================
