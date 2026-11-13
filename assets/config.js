@@ -4,8 +4,8 @@
  *  (anon key ওয়েবসাইটে রাখা নিরাপদ — আসল সুরক্ষা ডাটাবেসের RLS পলিসিতে)
  * ================================================================ */
 window.SCS_CONFIG = {
-  SUPABASE_URL: 'https://YOUR-PROJECT-ID.supabase.co',
-  SUPABASE_ANON_KEY: 'YOUR-ANON-PUBLIC-KEY',
+  SUPABASE_URL: 'sb_publishable_jSWfcBVTn-yA-0K9gb6F_A_qFEDEMv6',
+  SUPABASE_ANON_KEY: 'sb_publishable_jSWfcBVTn-yA-0K9gb6F_A_qFEDEMv6',
   TIMEZONE: 'Asia/Dhaka',
   COMPANY: 'Swarup Construction Solution'
 };
