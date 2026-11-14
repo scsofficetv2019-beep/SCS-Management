@@ -928,25 +928,73 @@ function loadHistory() {
   if (S.hist) renderHistory();
   else $('viewHistory').innerHTML = '<div class="text-center py-14 text-sm text-slate-500">…</div>';
   loading(true);
-  gs('getHistory', 300).then(function (r) { loading(false); S.hist = r.items; if (S.tab === 'history') renderHistory(); }).catch(function (e) { loading(false); toast(e.message, 'error'); });
+  gs('getHistory', 2000).then(function (r) { loading(false); S.hist = r.items; if (S.tab === 'history') renderHistory(); }).catch(function (e) { loading(false); toast(e.message, 'error'); });
 }
+/* ---- History: সময় (আজ / গতকাল / এই সপ্তাহ / এই মাস / গত মাস / নিজের তারিখ), ধরন, কাজ দিয়ে ফিল্টার; মার্ক করে ডিলিট ---- */
+Object.assign(S, { hp: 'all', hFrom: '', hTo: '', hk: 'all', ha: 'all', hMark: false, hSel: {}, hLimit: 60 });
+function histDay(off) { var d = new Date(Date.now() + (off || 0) * 864e5); return SCS.fmt(d, 'yyyy-MM-dd'); }
+function histRange() {
+  var td = histDay(0), ym = td.slice(0, 7), p = S.hp;
+  if (p === 'today') return [td, td];
+  if (p === 'yesterday') { var y = histDay(-1); return [y, y]; }
+  if (p === 'week') return [histDay(-6), td];
+  if (p === 'month') return [ym + '-01', ym + '-31'];
+  if (p === 'lastmonth') { var yy = Number(ym.slice(0, 4)), mm = Number(ym.slice(5, 7)) - 1; if (mm < 1) { mm = 12; yy--; } var lm = yy + '-' + ('0' + mm).slice(-2); return [lm + '-01', lm + '-31']; }
+  if (p === 'custom') return [S.hFrom || '0000-00-00', S.hTo || '9999-99-99'];
+  return null;
+}
+var H_KIND = { order: 'Order', product: 'Product', seller: 'Seller', settings: 'Settings' };
+function histList() {
+  var q = S.hq.toLowerCase().trim(), rg = histRange();
+  return (S.hist || []).filter(function (h) {
+    var d = String(h.time).slice(0, 10);
+    if (rg && (d < rg[0] || d > rg[1])) return false;
+    if (S.hk !== 'all' && h.entity !== H_KIND[S.hk]) return false;
+    if (S.ha !== 'all' && (S.ha === 'Edit' ? ['Edit', 'Status', 'Transport', 'Reorder'].indexOf(h.action) < 0 : h.action !== S.ha)) return false;
+    return !q || (h.entity + ' ' + h.ref + ' ' + h.action + ' ' + h.by + ' ' + JSON.stringify(h.before) + JSON.stringify(h.after)).toLowerCase().indexOf(q) > -1;
+  });
+}
+(function () {
+  var s = document.createElement('style');
+  s.textContent = '.hchip{flex:none;padding:6px 12px;border-radius:12px;font-size:11.5px;font-weight:700;white-space:nowrap;border:1px solid #e2e8f0;background:#fff;color:#475569;cursor:pointer}' +
+    '.dark .hchip{background:#0f172a;border-color:#334155;color:#cbd5e1}.hchip.on{background:#db2777;border-color:#db2777;color:#fff;box-shadow:0 4px 12px rgba(219,39,119,.3)}' +
+    '.htick{flex:none;width:20px;height:20px;margin-top:2px;border-radius:6px;border:2px solid #cbd5e1;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:900;color:#fff}' +
+    '.htick.on{background:#e11d48;border-color:#e11d48}.hsel{outline:2px solid #fb7185;outline-offset:1px}';
+  document.head.appendChild(s);
+})();
+function hChip(act, val, cur, label) { return '<button type="button" data-act="' + act + '" data-v="' + val + '" class="hchip' + (cur === val ? ' on' : '') + '">' + label + '</button>'; }
 function renderHistory() {
-  var q = S.hq.toLowerCase().trim(), list = (S.hist || []).filter(function (h) { return !q || (h.entity + ' ' + h.ref + ' ' + h.action + ' ' + h.by + ' ' + JSON.stringify(h.before) + JSON.stringify(h.after)).toLowerCase().indexOf(q) > -1; });
+  var all = histList(), list = all.slice(0, S.hLimit), isAdm = S.role === 'admin';
   var el = $('viewHistory'), keep = document.activeElement && document.activeElement.id === 'hSearch';
-  el.innerHTML = '<div class="flex items-center justify-between gap-2 mb-3"><div><h2 class="text-base sm:text-lg font-extrabold">' + t('Edit History', 'এডিট হিস্ট্রি') + '</h2><p class="text-[11px] text-slate-500">' + t('Every change: what it was before, what it is now, and when. Only Admin can delete.', 'প্রতিটি পরিবর্তন: আগে কী ছিল, এখন কী, কখন। শুধু অ্যাডমিন ডিলিট করতে পারবে।') + '</p></div><button type="button" data-act="histClear" class="btn-p ' + K.red + '">' + ic('trash', 'w-3.5 h-3.5') + t('Clear all', 'সব মুছুন') + '</button></div>' +
-    '<div class="relative mb-3"><span class="absolute left-3 top-2.5 text-slate-400" >' + ic('search', 'w-4 h-4') + '</span><input id="hSearch" class="inp pl-9" value="' + esc(S.hq) + '" placeholder="' + t('Search history...', 'হিস্ট্রি খুঁজুন...') + '" /></div>' +
+  var nSel = Object.keys(S.hSel).length;
+  var P = [['all', t('All time', 'সব সময়')], ['today', t('Today', 'আজ')], ['yesterday', t('Yesterday', 'গতকাল')], ['week', t('Last 7 days', 'গত ৭ দিন')], ['month', t('This month', 'এই মাস')], ['lastmonth', t('Last month', 'গত মাস')], ['custom', t('Date range', 'তারিখ বেছে')]];
+  var KK = [['all', t('Everything', 'সব')], ['order', t('Orders', 'অর্ডার')], ['product', t('Products', 'প্রোডাক্ট')], ['seller', t('Sellers', 'সেলার')], ['settings', t('Settings', 'সেটিংস')]];
+  var AA = [['all', t('Any action', 'সব কাজ')], ['Add', t('Added', 'যোগ')], ['Edit', t('Edited', 'এডিট')], ['Delete', t('Deleted', 'ডিলিট')]];
+  el.innerHTML = '<div class="flex items-center justify-between gap-2 mb-3 flex-wrap"><div><h2 class="text-base sm:text-lg font-extrabold">' + t('History', 'হিস্ট্রি') + '</h2><p class="text-[11px] text-slate-500">' + t('Every change: what it was before, what it is now, who and when.', 'প্রতিটি পরিবর্তন: আগে কী ছিল, এখন কী, কে ও কখন।') + '</p></div>' +
+      (isAdm ? '<div class="flex gap-2 flex-wrap">' + (S.hMark
+        ? '<button type="button" data-act="histSelAll" class="btn-p ' + K.slate + '">' + t('Select all shown', 'দেখানো সব বাছুন') + ' (' + all.length + ')</button><button type="button" data-act="histDelSel" class="btn-p ' + K.red + '"' + (nSel ? '' : ' disabled') + '>' + ic('trash', 'w-3.5 h-3.5') + t('Delete marked', 'মার্ক করা ডিলিট') + ' (' + nSel + ')</button><button type="button" data-act="histMark" class="btn-p ' + K.slate + '">' + t('Cancel', 'বাতিল') + '</button>'
+        : '<button type="button" data-act="histMark" class="btn-p ' + K.red + '">' + ic('trash', 'w-3.5 h-3.5') + t('Mark & delete', 'মার্ক করে ডিলিট') + '</button>') + '</div>' : '') + '</div>' +
+    '<div class="flex gap-1.5 overflow-x-auto pb-1 mb-2">' + P.map(function (x) { return hChip('histP', x[0], S.hp, x[1]); }).join('') + '</div>' +
+    (S.hp === 'custom' ? '<div class="flex gap-2 items-center mb-2 flex-wrap"><input type="date" id="hFrom" class="inp" style="max-width:170px" value="' + esc(S.hFrom) + '" /><span class="text-xs text-slate-500">→</span><input type="date" id="hTo" class="inp" style="max-width:170px" value="' + esc(S.hTo) + '" /></div>' : '') +
+    '<div class="flex gap-1.5 overflow-x-auto pb-1 mb-2">' + KK.map(function (x) { return hChip('histK', x[0], S.hk, x[1]); }).join('') + '<span class="w-2"></span>' + AA.map(function (x) { return hChip('histA', x[0], S.ha, x[1]); }).join('') + '</div>' +
+    '<div class="relative mb-3"><span class="absolute left-3 top-2.5 text-slate-400" >' + ic('search', 'w-4 h-4') + '</span><input id="hSearch" class="inp pl-9" value="' + esc(S.hq) + '" placeholder="' + t('Search order no, customer, product, user...', 'অর্ডার নং, কাস্টমার, প্রোডাক্ট, ইউজার খুঁজুন...') + '" /></div>' +
+    '<div class="text-[11px] text-slate-500 mb-2">' + t('Showing', 'দেখাচ্ছে') + ' <b>' + list.length + '</b> / ' + all.length + '</div>' +
     (list.length ? '<div class="space-y-2.5">' + list.map(function (h) {
       var colr = { Add: 'bg-emerald-100 text-emerald-700', Delete: 'bg-rose-100 text-rose-700', Edit: 'bg-amber-100 text-amber-700' }[h.action] || 'bg-blue-100 text-blue-700';
-      return '<div class="' + K.card + '"><div class="flex items-start justify-between gap-2 mb-2"><div class="min-w-0"><div class="flex flex-wrap items-center gap-1.5"><span class="px-2 py-0.5 rounded-lg text-[10px] font-bold ' + colr + '">' + esc(h.action) + '</span><span class="text-xs font-extrabold">' + esc(h.entity) + '</span><span class="text-xs font-bold text-pink-600 dark:text-pink-400 truncate">' + esc(h.ref) + '</span></div><div class="text-[10px] text-slate-500 mt-0.5">🕘 ' + esc(h.time) + ' · ' + esc(h.by) + '</div></div>' +
+      var on = !!S.hSel[h.id];
+      return '<div class="' + K.card + (on ? ' hsel' : '') + '"' + (S.hMark ? ' data-act="histTick" data-id="' + esc(h.id) + '" style="cursor:pointer"' : '') + '><div class="flex items-start justify-between gap-2 mb-2"><div class="min-w-0 flex gap-2">' +
+        (S.hMark ? '<span class="htick' + (on ? ' on' : '') + '">' + (on ? '✓' : '') + '</span>' : '') +
+        '<div class="min-w-0"><div class="flex flex-wrap items-center gap-1.5"><span class="px-2 py-0.5 rounded-lg text-[10px] font-bold ' + colr + '">' + esc(h.action) + '</span><span class="text-xs font-extrabold">' + esc(h.entity) + '</span><span class="text-xs font-bold text-pink-600 dark:text-pink-400 truncate">' + esc(h.ref) + '</span></div><div class="text-[10px] text-slate-500 mt-0.5">🕘 ' + esc(h.time) + ' · ' + esc(h.by) + '</div></div></div>' +
         '</div>' + diffHtml(h.before, h.after) + '</div>';
-    }).join('') + '</div>' : '<div class="text-center py-14 text-sm text-slate-500">' + t('No history yet.', 'এখনো কোনো হিস্ট্রি নেই।') + '</div>');
+    }).join('') + '</div>' + (all.length > list.length ? '<div class="text-center mt-3"><button type="button" data-act="histMore" class="btn-p ' + K.slate + '">' + t('Show more', 'আরও দেখুন') + '</button></div>' : '')
+      : '<div class="text-center py-14 text-sm text-slate-500">' + t('No history for this filter.', 'এই ফিল্টারে কোনো হিস্ট্রি নেই।') + '</div>');
   if (keep) { var i = $('hSearch'); i.focus(); i.setSelectionRange(i.value.length, i.value.length); }
 }
 function histDelete(ids) {
   askAdmin().then(function (pin) {
     if (!pin) return;
     loading(true);
-    gs('deleteHistory', ids, pin).then(function () { loading(false); toast(t('Deleted', 'মুছে ফেলা হয়েছে'), 'success'); S.hist = null; loadHistory(); }).catch(function (e) { loading(false); toast(e.message, 'error'); });
+    gs('deleteHistory', ids, pin).then(function (r) { loading(false); toast(t('Deleted', 'মুছে ফেলা হয়েছে') + (r && r.deleted ? ' (' + r.deleted + ')' : ''), 'success'); S.hSel = {}; S.hMark = false; S.hist = null; loadHistory(); }).catch(function (e) { loading(false); toast(e.message, 'error'); });
   });
 }
 
@@ -1200,6 +1248,14 @@ var ACT = {
   statMonth: function (el) { S.statOpen = S.statOpen === el.dataset.ym ? '-' : el.dataset.ym; drawTotal(); },
   printSummary: printSummary,
   histDel: function (el) { histDelete([el.dataset.id]); },
+  histP: function (el) { S.hp = el.dataset.v; S.hLimit = 60; renderHistory(); },
+  histK: function (el) { S.hk = el.dataset.v; S.hLimit = 60; renderHistory(); },
+  histA: function (el) { S.ha = el.dataset.v; S.hLimit = 60; renderHistory(); },
+  histMore: function () { S.hLimit += 100; renderHistory(); },
+  histMark: function () { S.hMark = !S.hMark; S.hSel = {}; renderHistory(); },
+  histTick: function (el) { var id = el.dataset.id; if (S.hSel[id]) delete S.hSel[id]; else S.hSel[id] = 1; renderHistory(); },
+  histSelAll: function () { var all = histList(), every = all.every(function (h) { return S.hSel[h.id]; }); S.hSel = {}; if (!every) all.forEach(function (h) { S.hSel[h.id] = 1; }); renderHistory(); },
+  histDelSel: function () { var ids = Object.keys(S.hSel); if (!ids.length) return; popup(t('Delete ' + ids.length + ' marked history item(s)? This cannot be undone.', ids.length + 'টি মার্ক করা হিস্ট্রি ডিলিট করবেন? এটা আর ফেরানো যাবে না।'), { confirm: true }).then(function (ok) { if (ok) histDelete(ids); }); },
   histClear: function () { popup(t('Delete ALL history? (Admin PIN required)', 'সব হিস্ট্রি মুছবেন? (অ্যাডমিন পিন লাগবে)'), { confirm: true }).then(function (ok) { if (ok) histDelete('ALL'); }); },
   popupOk: function () { closePopup(true); }, popupNo: function () { closePopup(false); }, pinClose: closePin,
   switch: function (el) { var on = !el.classList.contains('on'); el.classList.toggle('on', on); el.setAttribute('aria-checked', on ? 'true' : 'false'); },
@@ -1332,6 +1388,8 @@ document.addEventListener('change', function (e) {
   var el = e.target;
   if (el.id === 'monthSel') { S.m = Number(el.value); loadOrders(); }
   if (el.id === 'yearSel') { S.y = Number(el.value); loadOrders(); }
+  if (el.id === 'hFrom') { S.hFrom = el.value; renderHistory(); }
+  if (el.id === 'hTo') { S.hTo = el.value; renderHistory(); }
   if (el.id === 'lhFile') readLetterhead(el);
   if (el.id === 'sealFile') readSeal(el);
   if (el.id === 'noPack') { $('packBox').classList.toggle('hidden', el.checked); }

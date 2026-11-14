@@ -11,6 +11,8 @@ SCS Management (index.html)        ← লগইন / অ্যাকাউন�
 ├── apps/monthly-report/            ← SCS Monthly Report
 ├── apps/attendance/                ← SCS Employee Attendance
 ├── apps/chemical-order/            ← SCS Chemical Order
+├── apps/leave/                     ← SCS Leave Application (ছুটির আবেদন ও অনুমোদন)
+├── netlify/lib/server-config.mjs   ← SMS ও Gmail (SMTP) সেটিং — ডিপ্লয়ের আগেই এখানে বসান
 ├── assets/                         ← শেয়ার্ড কোড, লোগো (config.js এ Supabase কী)
 ├── sw.js, manifest.webmanifest     ← পুশ নোটিফিকেশন ও ফোনে "অ্যাপ" হিসেবে ইনস্টল
 ├── netlify/functions/
@@ -43,6 +45,8 @@ SCS Management (index.html)        ← লগইন / অ্যাকাউন�
 - **টপ বার:** প্রতিটা অ্যাপে 🏠 হোম বাটন (অন্য অ্যাপে যেতে) আর ⚙️ সেটিংস।
 - **ব্যাকআপ:** Admin Console → Backup থেকে সব অ্যাপের লাইফটাইম ডাটা JSON হিসেবে ডাউনলোড করা যায়, প্রতি মিনিট/ঘণ্টা/দিনে Google Drive-এ অটো পাঠানো যায়, আর ফাইল থেকে রিস্টোর করা যায়।
   নতুন অ্যাপের টেবিলও নিজে থেকেই ব্যাকআপে যোগ হয়।
+- **Leave Application:** প্রত্যেক কর্মী নিজের অ্যাকাউন্ট দিয়ে নিজের ছুটির আবেদন দেন। Admin অ্যাপ্রুভ বা রিজেক্ট করেন, আবেদনকারী সাথে সাথে নোটিফিকেশন পান। সব আপডেট লাইভ দেখায়।
+- **নোটিফিকেশন নিয়ম:** Admin Console → Notifications & Log থেকে কোন নোটিফিকেশন কে পাবে ঠিক করা যায়। ক্লক ইন/আউট রিমাইন্ডারও এখানে।
 - **নতুন অ্যাপ যোগ করা:** নিচে দেখুন (যেমন ভবিষ্যতের Employee Leave Application)। পুরো সেটআপ আর প্রতিবারের আপডেট নোট আছে **DEPLOY.md**-তে।
 - **শেয়ার্ড টেবিল:** `chem_orders` Chemical Order লেখে, Monthly Report শুধু পড়ে। `att_monthly_summary` Attendance লেখে, Monthly Report শুধু পড়ে।
 
@@ -118,7 +122,8 @@ SCS Management (index.html)        ← লগইন / অ্যাকাউন�
 2. GitHub-এ আপলোড করুন। তারপর Admin Console → Apps & admin PINs → **Add app**-এ একই key আর path `/apps/<key>/` দিন।
    বাইরের কোনো ওয়েবসাইটের লিংকও (https://…) অ্যাপ হিসেবে যোগ করা যায়।
 3. নতুন টেবিলে RLS: `has_app('<key>')`। Activity Log-এর জন্য: `select scs_attach_triggers('your_table', '<key>', 'Entity', 'ref_column');`
-   নোটিফিকেশন পাঠাতে (SQL ফাংশনের ভেতর থেকে): `perform scs_notify('<key>', 'Title', 'Body', '/apps/<key>/', auth.uid());`
+   নোটিফিকেশন পাঠাতে (SQL ফাংশনের ভেতর থেকে): `perform scs_notify_event('<key>.<event>', 'Title', 'Body', '/apps/<key>/', <target user বা null>, auth.uid());`
+   `notif_rules` টেবিলে ইভেন্টটা যোগ করলে Admin Console থেকে চালু/বন্ধ ও প্রাপক বদলানো যায় (Leave অ্যাপটাই সবচেয়ে ভালো উদাহরণ: `apps/leave/` আর schema.sql-এর সেকশন 11)।
 
 ## টেকনিক্যাল নোট
 

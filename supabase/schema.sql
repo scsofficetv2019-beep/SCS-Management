@@ -1052,7 +1052,623 @@ end $$;
 
 -- ডাটাবেস কোন ভার্সনে আছে (Admin Console মিলিয়ে দেখে)
 create or replace function public.scs_schema_version() returns int
-language sql immutable as $$ select 3; $$;
+language sql immutable as $$ select 4; $$;
+
+-- =====================================================================
+--  11. v4: SCS Leave Application, নোটিফিকেশন নিয়ম (কাস্টমাইজ করা যায়),
+--      হাজিরার রিমাইন্ডার, Activity Log-এ পিন/পাসওয়ার্ড লুকানো ও কে কী দেখবে
+-- =====================================================================
+
+-- ---------- অ্যাপ তালিকায় Leave Application ----------
+insert into public.apps (key, name, name_bn, description, path, icon, color, sort_order) values
+  ('leave', 'SCS Leave Application', 'এসসিএস লিভ অ্যাপ্লিকেশন', 'Leave applications, approvals, leave record & balance', '/apps/leave/', '🌴', '#0891b2', 4)
+on conflict (key) do nothing;
+insert into public.app_pins (app_key) select key from public.apps on conflict (app_key) do nothing;
+
+-- ---------- Activity Log: গোপন তথ্য (পিন, পাসওয়ার্ড, টোকেন, API key) কখনো লগে দেখাবে না ----------
+create or replace function public.scs_secret_key(k text) returns boolean
+language sql immutable as $$
+  select k ~ '(^|_)(pin|pins|password|passwd|secret|token|api_?key|apikey|pin_hash|pin_len)(_|$)'
+      or k ~ '[a-z](Pin|PIN|Password|Secret|Token|ApiKey|Apikey|PinHash|PinLen)([A-Z_]|$)'
+      or k ~ '^(pin|password|secret|token|apiKey|adminPin|editPin|loginPin)$';
+$$;
+
+create or replace function public.scs_mask_secrets(j jsonb) returns jsonb
+language plpgsql immutable as $$
+declare k text; v jsonb; o jsonb;
+begin
+  if j is null then return null; end if;
+  if jsonb_typeof(j) = 'object' then
+    o := '{}'::jsonb;
+    for k, v in select * from jsonb_each(j) loop
+      if public.scs_secret_key(k) and v is not null and v <> 'null'::jsonb and v <> '""'::jsonb then
+        o := o || jsonb_build_object(k, '•••• (hidden)');
+      else
+        o := o || jsonb_build_object(k, public.scs_mask_secrets(v));
+      end if;
+    end loop;
+    return o;
+  elsif jsonb_typeof(j) = 'array' then
+    return coalesce((select jsonb_agg(public.scs_mask_secrets(x)) from jsonb_array_elements(j) x), '[]'::jsonb);
+  elsif jsonb_typeof(j) = 'string' and left(j #>> '{}', 5) = 'data:' then
+    return to_jsonb('[image]'::text);          -- ছবি/সিগনেচারের বড় ডাটা লগে রাখা হয় না
+  end if;
+  return j;
+end $$;
+
+create or replace function public.audit_trigger() returns trigger
+language plpgsql security definer set search_path = public as $$
+declare
+  v_old jsonb; v_new jsonb; v_changed text[]; v_ref text;
+  v_uid uuid := auth.uid(); v_email text; v_name text;
+begin
+  if current_setting('scs.restoring', true) = '1' then return coalesce(new, old); end if;
+  if tg_op in ('UPDATE','DELETE') then v_old := to_jsonb(old); end if;
+  if tg_op in ('INSERT','UPDATE') then v_new := to_jsonb(new); end if;
+  if tg_op = 'UPDATE' then
+    select array_agg(k order by k) into v_changed from (
+      select n.key as k from jsonb_each(v_new) n
+       where n.key not in ('updated_at','updated_by') and (v_old -> n.key) is distinct from n.value
+      union
+      select o.key from jsonb_each(v_old) o where not (v_new ? o.key)
+    ) s;
+    if v_changed is null then return new; end if;
+  end if;
+  v_ref := coalesce(v_new ->> tg_argv[2], v_old ->> tg_argv[2]);
+  -- আগে-পরে দুই জায়গাতেই পিন/পাসওয়ার্ড/টোকেন লুকানো (কী বদলেছে সেটা শুধু নামে দেখাবে)
+  v_old := public.scs_mask_secrets(v_old);
+  v_new := public.scs_mask_secrets(v_new);
+  if v_uid is not null then
+    select email, coalesce(nullif(full_name, ''), email) into v_email, v_name from public.profiles where id = v_uid;
+  else
+    v_name := 'System';
+  end if;
+  insert into public.audit_log (app_key, table_name, entity, record_ref, action,
+                                old_data, new_data, changed_fields, actor_id, actor_email, actor_name)
+  values (tg_argv[0], tg_table_name, tg_argv[1], v_ref,
+          case tg_op when 'INSERT' then 'Add' when 'UPDATE' then 'Edit' else 'Delete' end,
+          v_old, v_new, v_changed, v_uid, v_email, v_name);
+  return coalesce(new, old);
+end $$;
+
+-- আগের লগে যদি কোনো পিন/পাসওয়ার্ড থেকে থাকে সেটাও লুকানো (একবার, বারবার Run করলেও সমস্যা নেই)
+update public.audit_log set old_data = public.scs_mask_secrets(old_data), new_data = public.scs_mask_secrets(new_data)
+ where coalesce(old_data::text, '') || coalesce(new_data::text, '') ~* '(pin|password|passwd|secret|token|api_?key|"data:)';
+
+-- ---------- Activity Log কে কী দেখবে (Admin Console > Notifications & Log থেকে বদলানো যায়) ----------
+-- Super Admin ও অ্যাপের Admin সব দেখে; সাধারণ ইউজার লুকানো তালিকার বাইরেরগুলো দেখে
+insert into public.sys_settings (key, value) values ('activity_visibility', jsonb_build_object('hidden', jsonb_build_array(
+  'chemical-order:chem_settings', 'attendance:att_settings', 'monthly-report:mr_settings', 'leave:leave_settings', 'leave:leave_signatures')))
+on conflict (key) do nothing;
+
+create or replace function public.scs_audit_visible(p_app text, p_table text) returns boolean
+language sql stable security definer set search_path = public as $$
+  select case
+    when p_app = 'core' then public.is_super_admin()
+    when public.has_app(p_app, 'admin') then true
+    when not public.has_app(p_app) then false
+    else not coalesce((select (value -> 'hidden') ? (p_app || ':' || p_table) from public.sys_settings where key = 'activity_visibility'),
+                      p_table ~ '_(settings|signatures)$')
+  end;
+$$;
+drop policy if exists scs_audit_read on public.audit_log;
+create policy scs_audit_read on public.audit_log for select to authenticated using (public.scs_audit_visible(app_key, table_name));
+-- লগ মার্ক করে ডিলিট: Super Admin সব, অ্যাপের Admin শুধু নিজের অ্যাপের
+drop policy if exists scs_audit_delete on public.audit_log;
+create policy scs_audit_delete on public.audit_log for delete to authenticated
+  using (public.is_super_admin() or (app_key <> 'core' and public.has_app(app_key, 'admin')));
+
+-- ---------- SCS LEAVE APPLICATION ----------
+create table if not exists public.leave_employees (
+  id          text primary key,
+  emp_id      text not null unique,
+  user_id     uuid unique references public.profiles(id) on delete set null,
+  name        text not null default '',
+  designation text not null default '',
+  mobile      text not null default '',
+  photo_url   text not null default '',
+  sl_no       int  not null default 0,
+  quota       numeric not null default 12,
+  leave_types text not null default '',
+  approvers   text not null default '',
+  active      boolean not null default true,
+  created_at timestamptz default now(), created_by uuid,
+  updated_at timestamptz default now(), updated_by uuid
+);
+create table if not exists public.leave_applications (
+  id            text primary key,                 -- LA ID, যেমন SCS202611-01
+  emp_id        text not null,
+  user_id       uuid references public.profiles(id) on delete set null,
+  employee_name text not null default '',
+  designation   text not null default '',
+  mobile        text not null default '',
+  from_date     text not null,
+  to_date       text not null,
+  total_days    numeric not null default 0,
+  leave_type    text not null default '',
+  quota         numeric not null default 12,
+  description   text not null default '',
+  status        text not null default 'Pending' check (status in ('Pending','Approved','Rejected')),
+  approved_by   text not null default '',
+  reject_reason text not null default '',
+  decided_at    timestamptz,
+  decided_by    uuid,
+  created_at timestamptz default now(), created_by uuid,
+  updated_at timestamptz default now(), updated_by uuid
+);
+create index if not exists leave_applications_emp  on public.leave_applications (emp_id);
+create index if not exists leave_applications_date on public.leave_applications (from_date, to_date);
+create table if not exists public.leave_settings (
+  key text primary key, value jsonb,
+  created_at timestamptz default now(), created_by uuid,
+  updated_at timestamptz default now(), updated_by uuid
+);
+create table if not exists public.leave_signatures (
+  key text primary key,                           -- emp:<ID>, apr:<নাম>, seal:company
+  s   text not null default '',
+  i   text not null default '',
+  created_at timestamptz default now(), created_by uuid,
+  updated_at timestamptz default now(), updated_by uuid
+);
+insert into public.leave_settings (key, value) values ('global', jsonb_build_object(
+  'leaveTypes', 'Casual Leave, Physical Leave, Family Problem Leave, Weeding Leave, Other',
+  'approvers', 'Mr. Ujjal Majumder, Shamiran Halder')) on conflict (key) do nothing;
+
+select public.scs_attach_triggers('leave_employees',    'leave', 'Employee',          'emp_id');
+select public.scs_attach_triggers('leave_applications', 'leave', 'Leave Application', 'id');
+select public.scs_attach_triggers('leave_settings',     'leave', 'Settings',          'key');
+select public.scs_attach_triggers('leave_signatures',   'leave', 'Signature',         'key');
+
+alter table public.leave_employees    enable row level security;
+alter table public.leave_applications enable row level security;
+alter table public.leave_settings     enable row level security;
+alter table public.leave_signatures   enable row level security;
+drop policy if exists scs_le_read on public.leave_employees;
+drop policy if exists scs_le_write on public.leave_employees;
+drop policy if exists scs_la_read on public.leave_applications;
+drop policy if exists scs_la_write on public.leave_applications;
+drop policy if exists scs_ls_read on public.leave_settings;
+drop policy if exists scs_ls_write on public.leave_settings;
+drop policy if exists scs_lg_read on public.leave_signatures;
+drop policy if exists scs_lg_write on public.leave_signatures;
+create policy scs_le_read  on public.leave_employees    for select to authenticated using (public.has_app('leave'));
+create policy scs_le_write on public.leave_employees    for all    to authenticated using (public.has_app('leave','admin')) with check (public.has_app('leave','admin'));
+create policy scs_la_read  on public.leave_applications for select to authenticated using (public.has_app('leave'));
+-- নতুন আবেদন leave_submit() দিয়ে (নিজের জন্য); এডিট/অ্যাপ্রুভ/ডিলিট শুধু Admin
+create policy scs_la_write on public.leave_applications for all    to authenticated using (public.has_app('leave','admin')) with check (public.has_app('leave','admin'));
+create policy scs_ls_read  on public.leave_settings     for select to authenticated using (public.has_app('leave'));
+create policy scs_ls_write on public.leave_settings     for all    to authenticated using (public.has_app('leave','admin')) with check (public.has_app('leave','admin'));
+create policy scs_lg_read  on public.leave_signatures   for select to authenticated using (public.has_app('leave'));
+create policy scs_lg_write on public.leave_signatures   for all    to authenticated using (public.has_app('leave','admin')) with check (public.has_app('leave','admin'));
+
+-- নতুন আবেদন: ইউজার শুধু নিজের জন্য, Admin যে কারো জন্য। LA ID সার্ভারেই তৈরি হয় (একই নম্বর দুবার হয় না)
+create or replace function public.leave_submit(p jsonb) returns text
+language plpgsql security definer set search_path = public as $$
+declare e public.leave_employees; v_prefix text; v_n int; v_id text;
+begin
+  if not public.has_app('leave') then raise exception 'Leave Application access required'; end if;
+  select * into e from public.leave_employees where emp_id = p ->> 'employeeId' and active;
+  if not found then raise exception 'Employee not found'; end if;
+  if not public.has_app('leave', 'admin') and e.user_id is distinct from auth.uid() then
+    raise exception 'You can apply only for yourself / শুধু নিজের জন্য আবেদন করা যায়';
+  end if;
+  if coalesce(p ->> 'fromDate', '') = '' or coalesce(p ->> 'toDate', '') = '' or coalesce(nullif(p ->> 'totalDays', '')::numeric, 0) <= 0 then
+    raise exception 'Fill all fields correctly';
+  end if;
+  perform pg_advisory_xact_lock(hashtext('scs_leave_id'));
+  v_prefix := 'SCS' || to_char(now() at time zone 'Asia/Dhaka', 'YYYYMM') || '-';
+  select coalesce(max(substring(id from length(v_prefix) + 1)::int), 0) + 1 into v_n
+    from public.leave_applications where id like v_prefix || '%' and substring(id from length(v_prefix) + 1) ~ '^\d+$';
+  v_id := v_prefix || lpad(v_n::text, 2, '0');
+  insert into public.leave_applications (id, emp_id, user_id, employee_name, designation, mobile, from_date, to_date,
+                                         total_days, leave_type, quota, description)
+  values (v_id, e.emp_id, e.user_id, e.name, e.designation, e.mobile, p ->> 'fromDate', p ->> 'toDate',
+          (p ->> 'totalDays')::numeric, coalesce(p ->> 'leaveType', ''), e.quota, coalesce(p ->> 'description', ''));
+  return v_id;
+end $$;
+
+-- অ্যাপ্রুভার নাম বদলালে সব জায়গায় (গ্লোবাল তালিকা, কর্মী, আবেদন, সিগনেচার) একসাথে
+create or replace function public.leave_csv_swap(v text, p_old text, p_new text) returns text
+language sql immutable as $$
+  select coalesce(string_agg(case when trim(x) = p_old then p_new else trim(x) end, ', ' order by o), '')
+  from unnest(string_to_array(coalesce(v, ''), ',')) with ordinality as t(x, o) where trim(x) <> '';
+$$;
+create or replace function public.leave_rename_approver(p_old text, p_new text) returns void
+language plpgsql security definer set search_path = public as $$
+begin
+  if not public.has_app('leave', 'admin') then raise exception 'Leave admin access required'; end if;
+  p_old := trim(coalesce(p_old, '')); p_new := trim(coalesce(p_new, ''));
+  if p_old = '' or p_new = '' then raise exception 'Name is required'; end if;
+  update public.leave_settings set value = jsonb_set(coalesce(value, '{}'::jsonb), '{approvers}', to_jsonb(public.leave_csv_swap(value ->> 'approvers', p_old, p_new)))
+   where key = 'global';
+  update public.leave_employees set approvers = public.leave_csv_swap(approvers, p_old, p_new) where approvers like '%' || p_old || '%';
+  update public.leave_applications set approved_by = public.leave_csv_swap(approved_by, p_old, p_new) where approved_by like '%' || p_old || '%';
+  update public.leave_signatures set key = 'apr:' || p_new
+   where key = 'apr:' || p_old and not exists (select 1 from public.leave_signatures where key = 'apr:' || p_new);
+end $$;
+
+-- SCS অ্যাকাউন্ট (অনুমোদিত এমপ্লয়ি) -> Leave অ্যাপের কর্মী (নাম, মোবাইল, ছবি, ID প্রোফাইল থেকে)
+create or replace function public.sync_leave_employee_from_profile() returns trigger
+language plpgsql security definer set search_path = public as $$
+declare e record; o record; v_name text;
+begin
+  if current_setting('scs.restoring', true) = '1' then return null; end if;
+  v_name := coalesce(nullif(trim(new.full_name), ''), new.email);
+  select * into e from public.leave_employees where user_id = new.id;
+  if not (new.status = 'active' and new.is_employee and new.employee_id is not null) then
+    if found and e.active then update public.leave_employees set active = false where id = e.id; end if;
+    return null;
+  end if;
+  if not found then
+    -- পুরনো শিট থেকে আনা একই Employee ID থাকলে তার সাথেই জোড়া (ছুটির ইতিহাস থাকে)
+    select * into e from public.leave_employees where emp_id = new.employee_id and user_id is null limit 1;
+    if found then
+      update public.leave_employees set user_id = new.id where id = e.id;
+    else
+      insert into public.leave_employees (id, emp_id, user_id, name, designation, mobile, photo_url, sl_no, active)
+      values ('u-' || replace(new.id::text, '-', ''), new.employee_id, new.id, v_name, new.designation, new.phone, new.photo_url,
+              coalesce((select max(sl_no) from public.leave_employees), 0) + 1, true);
+      return null;
+    end if;
+  end if;
+  if e.emp_id is distinct from new.employee_id then
+    select * into o from public.leave_employees where emp_id = new.employee_id and id <> e.id;
+    if found and o.user_id is null then
+      -- পুরনো শিট থেকে আনা একই ID-র কর্মী আছে: দুটো এক করা (পুরনো ছুটির ইতিহাস থাকে)
+      update public.leave_applications set emp_id = new.employee_id where emp_id = e.emp_id;
+      delete from public.leave_employees where id = e.id;
+      update public.leave_employees set user_id = new.id where id = o.id;
+      e := o;
+    elsif found then
+      raise warning 'Employee ID % is already linked to another account', new.employee_id;
+      return null;
+    else
+      update public.leave_applications set emp_id = new.employee_id where emp_id = e.emp_id;
+      update public.leave_signatures set key = 'emp:' || new.employee_id
+       where key = 'emp:' || e.emp_id and not exists (select 1 from public.leave_signatures where key = 'emp:' || new.employee_id);
+    end if;
+  end if;
+  update public.leave_employees set
+    emp_id = new.employee_id, name = v_name, mobile = new.phone,
+    photo_url   = case when new.photo_url   <> '' then new.photo_url   else photo_url   end,
+    designation = case when new.designation <> '' then new.designation else designation end,
+    active = true, user_id = new.id
+  where id = e.id;
+  return null;
+exception when others then
+  raise warning 'SCS leave employee sync skipped for %: %', new.email, sqlerrm;
+  return null;
+end $$;
+drop trigger if exists zz_sync_leave_employee on public.profiles;
+create trigger zz_sync_leave_employee after insert or update on public.profiles
+  for each row execute function public.sync_leave_employee_from_profile();
+
+-- ---------- নোটিফিকেশন নিয়ম: কোন ঘটনায় কে নোটিফিকেশন পাবে (Admin Console থেকে চালু/বন্ধ ও প্রাপক বদলানো যায়) ----------
+--  audience: app_users = অ্যাপের সব ইউজার, app_admins = অ্যাপের Admin, super_admins = শুধু Super Admin,
+--            person = শুধু সংশ্লিষ্ট ব্যক্তি, person_admins = সংশ্লিষ্ট ব্যক্তি + অ্যাপের Admin
+create table if not exists public.notif_rules (
+  event_key  text primary key,
+  app_key    text not null,
+  label      text not null,
+  label_bn   text,
+  enabled    boolean not null default true,
+  audience   text not null default 'app_users' check (audience in ('app_users','app_admins','super_admins','person','person_admins')),
+  options    jsonb not null default '{}'::jsonb,
+  sort_order int not null default 0,
+  updated_at timestamptz default now(), updated_by uuid
+);
+insert into public.notif_rules (event_key, app_key, label, label_bn, audience, options, sort_order) values
+  ('core.new_account',               'core',           'New account opened (waiting for approval)', 'নতুন অ্যাকাউন্ট খোলা হয়েছে (অনুমোদনের অপেক্ষায়)', 'super_admins', '{}', 1),
+  ('core.account_approved',          'core',           'Your account was approved',                 'আপনার অ্যাকাউন্ট অনুমোদিত হয়েছে',               'person',       '{}', 2),
+  ('chemical-order.new_order',       'chemical-order', 'New chemical order',                        'নতুন কেমিক্যাল অর্ডার',                          'app_users',    '{}', 10),
+  ('leave.new_application',          'leave',          'New leave application',                     'নতুন ছুটির আবেদন',                               'app_admins',   '{}', 20),
+  ('leave.decision',                 'leave',          'Leave approved / rejected (to applicant)',  'ছুটি অ্যাপ্রুভ / রিজেক্ট (আবেদনকারীকে)',           'person',       '{}', 21),
+  ('attendance.clock_in_reminder',   'attendance',     'Reminder: Clock IN at office start time',   'রিমাইন্ডার: অফিস শুরুর সময় ক্লক ইন',             'person',       '{"offset": 0}', 30),
+  ('attendance.clock_out_reminder',  'attendance',     'Reminder: Clock OUT at office end time',    'রিমাইন্ডার: অফিস শেষের সময় ক্লক আউট',             'person',       '{"offset": 0}', 31)
+on conflict (event_key) do update set app_key = excluded.app_key, label = excluded.label, label_bn = excluded.label_bn, sort_order = excluded.sort_order;
+alter table public.notif_rules enable row level security;
+drop policy if exists scs_nr_read on public.notif_rules;
+drop policy if exists scs_nr_write on public.notif_rules;
+create policy scs_nr_read  on public.notif_rules for select to authenticated using (true);
+create policy scs_nr_write on public.notif_rules for all    to authenticated using (public.is_super_admin()) with check (public.is_super_admin());
+select public.scs_attach_triggers('notif_rules', 'core', 'Notification Rule', 'event_key', false);
+
+-- সার্ভার থেকেই পুশ পাঠানো (Netlify push function কে ডাকা) — সাইটের ঠিকানা Admin Console নিজে সেভ করে
+insert into public.sys_secrets (key, value)
+values ('cron_key', replace(gen_random_uuid()::text, '-', '') || replace(gen_random_uuid()::text, '-', ''))
+on conflict (key) do nothing;
+
+create or replace function public.scs_push_kick() returns void
+language plpgsql security definer set search_path = public, extensions as $$
+declare u text; k text;
+begin
+  select value ->> 'url' into u from public.sys_settings where key = 'site';
+  if coalesce(u, '') = '' then return; end if;
+  select value into k from public.sys_secrets where key = 'cron_key';
+  perform net.http_post(url := rtrim(u, '/') || '/.netlify/functions/push',
+                        body := jsonb_build_object('dispatch', true, 'cronKey', coalesce(k, '')),
+                        headers := '{"Content-Type": "application/json"}'::jsonb, timeout_milliseconds := 20000);
+exception when others then
+  null;   -- pg_net না থাকলে বা ঠিকানা না থাকলে: অ্যাপ খুললেই পুশ যাবে
+end $$;
+revoke execute on function public.scs_push_kick() from public, anon, authenticated;
+
+create or replace function public.scs_notify_event(p_event text, p_title text, p_body text, p_url text,
+                                                   p_target uuid default null, p_exclude uuid default null)
+returns int language plpgsql security definer set search_path = public as $$
+declare r public.notif_rules; v_app text; v_aud text; n int := 0;
+begin
+  select * into r from public.notif_rules where event_key = p_event;
+  if found and not r.enabled then return 0; end if;
+  v_app := coalesce(r.app_key, split_part(p_event, '.', 1));
+  v_aud := coalesce(r.audience, 'app_users');
+  insert into public.notifications (user_id, app_key, title, body, url)
+  select p.id, v_app, p_title, coalesce(p_body, ''), coalesce(p_url, '/')
+  from public.profiles p
+  where p.status = 'active' and p.id is distinct from p_exclude and (
+    case v_aud
+      when 'person'       then p.id = p_target
+      when 'super_admins' then p.is_super_admin
+      when 'app_admins'   then p.is_super_admin or exists (select 1 from public.app_access a where a.user_id = p.id and a.app_key = v_app and a.role = 'admin')
+      when 'person_admins' then p.id = p_target or p.is_super_admin
+                               or exists (select 1 from public.app_access a where a.user_id = p.id and a.app_key = v_app and a.role = 'admin')
+      else p.is_super_admin or exists (select 1 from public.app_access a where a.user_id = p.id and a.app_key = v_app)
+    end);
+  get diagnostics n = row_count;
+  if n > 0 then perform public.scs_push_kick(); end if;
+  return n;
+end $$;
+revoke execute on function public.scs_notify_event(text, text, text, text, uuid, uuid) from public, anon, authenticated;
+
+-- পুরনো scs_notify এখনো কাজ করে (নতুন অ্যাপের জন্য)
+create or replace function public.scs_notify(p_app text, p_title text, p_body text, p_url text, p_exclude uuid default null)
+returns int language plpgsql security definer set search_path = public as $$
+begin
+  return public.scs_notify_event(p_app || '.general', p_title, p_body, p_url, null, p_exclude);
+end $$;
+revoke execute on function public.scs_notify(text, text, text, text, uuid) from public, anon, authenticated;
+
+-- নতুন অ্যাকাউন্ট -> Super Admin; অনুমোদন পেলে -> সেই ব্যক্তি
+create or replace function public.notify_new_account() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  if current_setting('scs.restoring', true) = '1' then return null; end if;
+  perform public.scs_notify_event('core.new_account', 'New account waiting for approval',
+    coalesce(nullif(new.full_name, ''), new.email) || ' · ' || coalesce(nullif(new.phone, ''), new.email), '/admin.html', null, new.id);
+  return null;
+exception when others then return null;
+end $$;
+create or replace function public.notify_account_status() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  if current_setting('scs.restoring', true) = '1' then return null; end if;
+  if new.status = 'active' and old.status is distinct from 'active' then
+    perform public.scs_notify_event('core.account_approved', 'Your account is approved ✅',
+      'You can now open the apps you have access to. / এখন অ্যাক্সেস পাওয়া অ্যাপগুলো খুলতে পারবেন।', '/', new.id, null);
+  end if;
+  return null;
+exception when others then return null;
+end $$;
+drop trigger if exists zz_notify_account_status on public.profiles;
+create trigger zz_notify_account_status after update on public.profiles
+  for each row execute function public.notify_account_status();
+
+-- নতুন অর্ডার (নিয়ম: chemical-order.new_order)
+create or replace function public.chem_create_order(p jsonb) returns text
+language plpgsql security definer set search_path = public as $$
+declare v_no text; v_total numeric; v_by text;
+begin
+  if not public.has_app('chemical-order') then raise exception 'Chemical Order access required'; end if;
+  perform pg_advisory_xact_lock(hashtext('scs_chem_order_no'));
+  v_no := public.chem_next_order_no();
+  insert into public.chem_orders (order_no, delivery_at, client_name, mobile, address, transport_fee,
+                                  scs_transport_cost, order_by, commission_holder_name, items, sms_status, pdf_status)
+  values (v_no, coalesce(p->>'delivery_at',''), coalesce(p->>'client_name',''), coalesce(p->>'mobile',''),
+          coalesce(p->>'address',''), coalesce((p->>'transport_fee')::numeric, 0),
+          coalesce((p->>'scs_transport_cost')::numeric, 0), coalesce(p->>'order_by',''),
+          coalesce(p->>'commission_holder_name',''), coalesce(p->'items','[]'::jsonb), 'Pending', 'Not Uploaded');
+  select coalesce(sum(coalesce(nullif(i->>'quantity','')::numeric, 0) * coalesce(nullif(i->>'discountUnitPrice','')::numeric, 0)), 0)
+    into v_total from jsonb_array_elements(coalesce(p->'items','[]'::jsonb)) i;
+  v_total := v_total + coalesce((p->>'transport_fee')::numeric, 0);
+  v_by := coalesce(p->>'order_by', '');
+  perform public.scs_notify_event('chemical-order.new_order', 'New order ' || v_no,
+    coalesce(nullif(p->>'client_name', ''), 'Customer') || ' · Tk ' || to_char(v_total, 'FM999,999,999,990') ||
+    case when v_by <> '' then ' · by ' || v_by else '' end,
+    '/apps/chemical-order/', null, auth.uid());
+  return v_no;
+end $$;
+
+-- ছুটির আবেদন -> Admin দের; অ্যাপ্রুভ/রিজেক্ট -> আবেদনকারীকে
+create or replace function public.leave_notify() returns trigger
+language plpgsql security definer set search_path = public as $$
+declare v_target uuid; v_days text;
+begin
+  if current_setting('scs.restoring', true) = '1' then return null; end if;
+  v_target := coalesce(new.user_id, (select user_id from public.leave_employees where emp_id = new.emp_id));
+  v_days := trim(to_char(new.total_days, 'FM999990.##'));
+  if tg_op = 'INSERT' then
+    perform public.scs_notify_event('leave.new_application', 'New leave application · ' || new.employee_name,
+      v_days || ' day(s) · ' || new.leave_type || ' · ' || new.from_date || ' → ' || new.to_date || ' · ' || new.id,
+      '/apps/leave/', v_target, auth.uid());
+  elsif new.status is distinct from old.status and new.status in ('Approved', 'Rejected') then
+    perform public.scs_notify_event('leave.decision',
+      case when new.status = 'Approved' then 'Your leave is approved ✅' else 'Your leave is rejected ❌' end,
+      new.id || ' · ' || new.from_date || ' → ' || new.to_date || ' · ' || v_days || ' day(s)' ||
+      case when new.status = 'Approved' and new.approved_by <> '' then ' · by ' || new.approved_by
+           when new.status = 'Rejected' and new.reject_reason <> '' then ' · ' || new.reject_reason else '' end,
+      '/apps/leave/', v_target, null);
+  end if;
+  return null;
+exception when others then
+  raise warning 'leave notify: %', sqlerrm; return null;
+end $$;
+drop trigger if exists zz_leave_notify on public.leave_applications;
+create trigger zz_leave_notify after insert or update on public.leave_applications
+  for each row execute function public.leave_notify();
+
+-- ---------- হাজিরার রিমাইন্ডার: অফিস শুরুর সময় Clock IN, শেষের সময় Clock OUT ----------
+create table if not exists public.notif_sent (k text primary key, at timestamptz not null default now());
+alter table public.notif_sent enable row level security;
+
+create or replace function public.scs_time_min(t text) returns int
+language plpgsql immutable as $$
+declare m text[]; h int; mi int;
+begin
+  m := regexp_match(coalesce(t, ''), '(\d{1,2}):(\d{2})');
+  if m is null then return null; end if;
+  h := m[1]::int; mi := m[2]::int;
+  if t ~* 'pm' and h < 12 then h := h + 12; end if;
+  if t ~* 'am' and h = 12 then h := 0; end if;
+  return h * 60 + mi;
+end $$;
+
+create or replace function public.scs_attendance_reminders() returns int
+language plpgsql security definer set search_path = public as $$
+declare o jsonb; d text; now_min int; wd int; v_in text; v_out text; in_min int; out_min int;
+  rin public.notif_rules; rout public.notif_rules; n int := 0; c int; hol text;
+begin
+  d := to_char(now() at time zone 'Asia/Dhaka', 'YYYY-MM-DD');
+  now_min := extract(hour from now() at time zone 'Asia/Dhaka')::int * 60 + extract(minute from now() at time zone 'Asia/Dhaka')::int;
+  wd := extract(dow from now() at time zone 'Asia/Dhaka')::int;
+  if wd = 5 then return 0; end if;                                    -- শুক্রবার সাপ্তাহিক ছুটি
+  select value into o from public.att_settings where key = 'office';
+  hol := coalesce((o -> 'holidays')::text, coalesce(o ->> 'holidays', ''));
+  if position(d in hol) > 0 then return 0; end if;                    -- সরকারি/অফিস ছুটি
+  v_in := coalesce(nullif(o ->> 'officeInTime', ''), '09:00');
+  v_out := coalesce(nullif(o ->> 'officeOutTime', ''), '17:00');
+  in_min := public.scs_time_min(v_in); out_min := public.scs_time_min(v_out);
+  select * into rin from public.notif_rules where event_key = 'attendance.clock_in_reminder';
+  select * into rout from public.notif_rules where event_key = 'attendance.clock_out_reminder';
+
+  if in_min is not null and coalesce(rin.enabled, true) then
+    in_min := in_min + coalesce(nullif(rin.options ->> 'offset', '')::int, 0);
+    if now_min >= in_min and now_min < in_min + 20 and not exists (select 1 from public.notif_sent where k = 'in:' || d) then
+      insert into public.notif_sent (k) values ('in:' || d) on conflict do nothing;
+      insert into public.notifications (user_id, app_key, title, body, url)
+      select e.user_id, 'attendance', 'Time to Clock IN ⏰ / ক্লক ইন করুন',
+             'Office starts at ' || v_in || '. Please give your attendance now. / অফিস শুরু ' || v_in || '। এখনই হাজিরা দিন।', '/apps/attendance/'
+      from public.att_employees e join public.profiles p on p.id = e.user_id
+      where e.active and p.status = 'active'
+        and (p.is_super_admin or exists (select 1 from public.app_access a where a.user_id = p.id and a.app_key = 'attendance'))
+        and not exists (select 1 from public.att_records r where r.emp_id = e.emp_id and r.date = d and r.type = 'Clock IN')
+        and not exists (select 1 from public.leave_applications l where l.emp_id = e.emp_id and l.status = 'Approved' and l.from_date <= d and l.to_date >= d);
+      get diagnostics c = row_count; n := n + c;
+    end if;
+  end if;
+
+  if out_min is not null and coalesce(rout.enabled, true) then
+    out_min := out_min + coalesce(nullif(rout.options ->> 'offset', '')::int, 0);
+    if now_min >= out_min and now_min < out_min + 20 and not exists (select 1 from public.notif_sent where k = 'out:' || d) then
+      insert into public.notif_sent (k) values ('out:' || d) on conflict do nothing;
+      insert into public.notifications (user_id, app_key, title, body, url)
+      select e.user_id, 'attendance', 'Time to Clock OUT 🏁 / ক্লক আউট করুন',
+             'Office ends at ' || v_out || '. Do not forget to Clock OUT. / অফিস শেষ ' || v_out || '। ক্লক আউট দিতে ভুলবেন না।', '/apps/attendance/'
+      from public.att_employees e join public.profiles p on p.id = e.user_id
+      where e.active and p.status = 'active'
+        and (p.is_super_admin or exists (select 1 from public.app_access a where a.user_id = p.id and a.app_key = 'attendance'))
+        and exists (select 1 from public.att_records r where r.emp_id = e.emp_id and r.date = d and r.type = 'Clock IN')
+        and not exists (select 1 from public.att_records r where r.emp_id = e.emp_id and r.date = d and r.type = 'Clock OUT');
+      get diagnostics c = row_count; n := n + c;
+    end if;
+  end if;
+
+  delete from public.notif_sent where at < now() - interval '10 days';
+  if n > 0 then perform public.scs_push_kick(); end if;
+  return n;
+end $$;
+revoke execute on function public.scs_attendance_reminders() from public, anon;
+
+-- প্রতি মিনিটে চেক (কাজ খুব হালকা: সময় না হলে কিছুই করে না)
+do $$
+begin
+  begin perform cron.unschedule('scs-reminders'); exception when others then null; end;
+  begin
+    perform cron.schedule('scs-reminders', '* * * * *', 'select public.scs_attendance_reminders()');
+  exception when others then raise notice 'Reminders not scheduled (enable pg_cron): %', sqlerrm;
+  end;
+end $$;
+
+-- ---------- Realtime: Leave অ্যাপ লাইভ আপডেট ----------
+do $$
+declare t text;
+begin
+  if exists (select 1 from pg_publication where pubname = 'supabase_realtime') then
+    foreach t in array array['leave_applications','leave_employees','leave_settings'] loop
+      if not exists (select 1 from pg_publication_tables where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = t) then
+        execute format('alter publication supabase_realtime add table public.%I', t);
+      end if;
+    end loop;
+  end if;
+end $$;
+
+-- ব্যাকআপে যায় না: গোপন/অস্থায়ী টেবিল
+create or replace function public.scs_backup_excluded() returns text[]
+language sql immutable as $$
+  select array['sys_secrets','chem_secrets','password_reset_codes','sms_codes','push_subscriptions','notifications','sys_backup_log','notif_sent'];
+$$;
+
+-- পুরনো Google Sheet (Apps Script) থেকে Leave ডাটা আনা — migrate.html ব্যবহার করে (নোটিফিকেশন যায় না)
+create or replace function public.leave_import(p jsonb) returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare e jsonb; a jsonb; s jsonb; n_e int := 0; n_a int := 0; n_s int := 0;
+begin
+  if not public.is_super_admin() then raise exception 'Super Admin access required'; end if;
+  perform set_config('scs.restoring', '1', true);
+  if jsonb_typeof(p -> 'config') = 'object' then
+    insert into public.leave_settings (key, value) values ('global', p -> 'config')
+    on conflict (key) do update set value = excluded.value;
+  end if;
+  for e in select * from jsonb_array_elements(coalesce(p -> 'employees', '[]'::jsonb)) loop
+    continue when coalesce(e ->> 'emp_id', '') = '';
+    update public.leave_employees set
+      sl_no = coalesce(nullif(e ->> 'sl_no', '')::int, sl_no),
+      quota = coalesce(nullif(e ->> 'quota', '')::numeric, quota),
+      leave_types = coalesce(e ->> 'leave_types', leave_types),
+      approvers = coalesce(e ->> 'approvers', approvers),
+      name = case when user_id is null then coalesce(nullif(e ->> 'name', ''), name) else name end,
+      designation = case when user_id is null or designation = '' then coalesce(nullif(e ->> 'designation', ''), designation) else designation end,
+      mobile = case when user_id is null then coalesce(nullif(e ->> 'mobile', ''), mobile) else mobile end,
+      photo_url = case when photo_url = '' then coalesce(e ->> 'photo_url', '') else photo_url end
+    where emp_id = e ->> 'emp_id';
+    if not found then
+      insert into public.leave_employees (id, emp_id, name, designation, mobile, photo_url, sl_no, quota, leave_types, approvers, active, created_at, updated_at)
+      values ('lv-' || md5(e ->> 'emp_id'), e ->> 'emp_id', coalesce(e ->> 'name', ''), coalesce(e ->> 'designation', ''), coalesce(e ->> 'mobile', ''),
+              coalesce(e ->> 'photo_url', ''), coalesce(nullif(e ->> 'sl_no', '')::int, 0), coalesce(nullif(e ->> 'quota', '')::numeric, 12),
+              coalesce(e ->> 'leave_types', ''), coalesce(e ->> 'approvers', ''), true, now(), now())
+      on conflict (id) do nothing;
+    end if;
+    n_e := n_e + 1;
+  end loop;
+  for a in select * from jsonb_array_elements(coalesce(p -> 'applications', '[]'::jsonb)) loop
+    continue when coalesce(a ->> 'id', '') = '' or coalesce(a ->> 'emp_id', '') = '';
+    insert into public.leave_applications (id, emp_id, user_id, employee_name, designation, mobile, from_date, to_date, total_days,
+                                           leave_type, quota, description, status, approved_by, created_at, updated_at)
+    values (a ->> 'id', a ->> 'emp_id', (select user_id from public.leave_employees where emp_id = a ->> 'emp_id'),
+            coalesce(a ->> 'employee_name', ''), coalesce(a ->> 'designation', ''), coalesce(a ->> 'mobile', ''),
+            coalesce(a ->> 'from_date', ''), coalesce(a ->> 'to_date', ''), coalesce(nullif(a ->> 'total_days', '')::numeric, 0),
+            coalesce(a ->> 'leave_type', ''), coalesce(nullif(a ->> 'quota', '')::numeric, 12), coalesce(a ->> 'description', ''),
+            case when a ->> 'status' in ('Pending','Approved','Rejected') then a ->> 'status' else 'Pending' end,
+            coalesce(a ->> 'approved_by', ''), coalesce(nullif(a ->> 'created_at', '')::timestamptz, now()), now())
+    on conflict (id) do update set emp_id = excluded.emp_id, user_id = coalesce(excluded.user_id, public.leave_applications.user_id),
+      employee_name = excluded.employee_name, designation = excluded.designation, mobile = excluded.mobile,
+      from_date = excluded.from_date, to_date = excluded.to_date, total_days = excluded.total_days, leave_type = excluded.leave_type,
+      quota = excluded.quota, description = excluded.description, status = excluded.status, approved_by = excluded.approved_by,
+      created_at = excluded.created_at;
+    n_a := n_a + 1;
+  end loop;
+  for s in select * from jsonb_array_elements(coalesce(p -> 'signatures', '[]'::jsonb)) loop
+    continue when coalesce(s ->> 'key', '') = '';
+    insert into public.leave_signatures (key, s, i, created_at, updated_at) values (s ->> 'key', coalesce(s ->> 's', ''), coalesce(s ->> 'i', ''), now(), now())
+    on conflict (key) do update set s = excluded.s, i = excluded.i;
+    n_s := n_s + 1;
+  end loop;
+  perform set_config('scs.restoring', '0', true);
+  return jsonb_build_object('employees', n_e, 'applications', n_a, 'signatures', n_s);
+end $$;
+revoke execute on function public.leave_import(jsonb) from public, anon;
+
+-- বর্তমান অনুমোদিত এমপ্লয়িদের Leave অ্যাপে যোগ করা
+update public.profiles set is_employee = is_employee where status = 'active';
 
 -- =====================================================================
 --  10. প্রথম সুপার অ্যাডমিন বানানো (একবারই)

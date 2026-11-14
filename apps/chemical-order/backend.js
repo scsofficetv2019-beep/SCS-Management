@@ -609,8 +609,21 @@
     return q(sb().from('audit_log').select('*').eq('app_key', APP).order('id', { ascending: false }).limit(Math.min(Number(limit) || 300, 2000)))
       .then(function (rows) { return { ok: true, items: rows.map(histItem) }; });
   };
-  B.deleteHistory = function () {
-    throw new Error('হিস্ট্রি এখন লাইফটাইম ও স্থায়ী — কেউ মুছতে পারবে না (কে কী করেছে তার নিশ্চয়তার জন্য)।');
+  /** মার্ক করা হিস্ট্রি ডিলিট (শুধু Admin, অ্যাডমিন পিনসহ) */
+  B.deleteHistory = function (ids, pin) {
+    if (SCS.role !== 'admin') throw new Error(SCS.t('Only Admin can delete history.', 'শুধু অ্যাডমিন হিস্ট্রি ডিলিট করতে পারবে।'));
+    if (!SCS.adminUnlocked && !SCS.checkAdminPin(pin)) throw new Error(SCS.t('Wrong admin PIN', 'ভুল অ্যাডমিন পিন'));
+    var list = ids === 'ALL' ? null : (ids || []).map(Number).filter(function (x) { return x > 0; });
+    if (list && !list.length) return { ok: true, deleted: 0 };
+    if (!list) return q(sb().from('audit_log').delete().eq('app_key', APP).select('id')).then(function (r) { return { ok: true, deleted: (r || []).length }; });
+    var n = 0, chain = Promise.resolve();
+    for (var i = 0; i < list.length; i += 200) (function (part) {
+      chain = chain.then(function () { return q(sb().from('audit_log').delete().eq('app_key', APP).in('id', part).select('id')).then(function (r) { n += (r || []).length; }); });
+    })(list.slice(i, i + 200));
+    return chain.then(function () {
+      if (!n) throw new Error(SCS.t('Not deleted — run the latest supabase/schema.sql (admins can delete their app history).', 'ডিলিট হয়নি — সর্বশেষ supabase/schema.sql Run করুন।'));
+      return { ok: true, deleted: n };
+    });
   };
 
   /* ---- products & sellers ---- */

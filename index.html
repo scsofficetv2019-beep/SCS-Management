@@ -54,16 +54,16 @@
       <div class="field"><label class="l" for="liPass" data-i="Password|পাসওয়ার্ড"></label><input class="in-f" id="liPass" type="password" autocomplete="current-password" required /></div>
       <button class="btn p w" type="submit" data-i="Log in|লগইন করুন"></button>
       <div class="center" style="margin-top:14px;display:flex;justify-content:center;gap:18px;flex-wrap:wrap">
-        <button type="button" class="link" id="toSmsLogin" data-i="Log in with SMS code|SMS কোড দিয়ে লগইন"></button>
+        <button type="button" class="link" id="toSmsLogin" data-i="Log in with a code (SMS / email)|কোড দিয়ে লগইন (SMS / ইমেইল)"></button>
         <button type="button" class="link" id="toForgot" data-i="Forgot password?|পাসওয়ার্ড ভুলে গেছেন?"></button>
       </div>
     </form>
 
     <!-- login with SMS code -->
     <form id="fSmsLogin" class="hidden">
-      <h2 class="h2" data-i="Log in with SMS code|SMS কোড দিয়ে লগইন"></h2>
-      <div class="field"><label class="l" for="slPhone" data-i="Mobile number on your account|অ্যাকাউন্টের মোবাইল নম্বর"></label>
-        <div style="display:flex;gap:8px"><input class="in-f" id="slPhone" inputmode="tel" placeholder="01XXXXXXXXX" /><button class="btn g" type="button" id="slSend" style="flex:none" data-i="Send code|কোড পাঠান"></button></div></div>
+      <h2 class="h2" data-i="Log in with a code|কোড দিয়ে লগইন"></h2>
+      <div class="field"><label class="l" for="slPhone" data-i="Mobile number (SMS) or email on your account|অ্যাকাউন্টের মোবাইল নম্বর (SMS) বা ইমেইল"></label>
+        <div style="display:flex;gap:8px"><input class="in-f" id="slPhone" placeholder="01XXXXXXXXX / you@example.com" /><button class="btn g" type="button" id="slSend" style="flex:none" data-i="Send code|কোড পাঠান"></button></div></div>
       <div class="field"><label class="l" for="slCode" data-i="6-digit code|৬ সংখ্যার কোড"></label><input class="in-f otp" id="slCode" inputmode="numeric" autocomplete="one-time-code" maxlength="6" /></div>
       <button class="btn p w" type="submit" data-i="Log in|লগইন করুন"></button>
       <div class="center" style="margin-top:14px"><button type="button" class="link" data-back data-i="← Back to log in|← লগইনে ফিরুন"></button></div>
@@ -77,10 +77,15 @@
         <div class="field"><label class="l" for="suPass" data-i="Password (min 8)|পাসওয়ার্ড (৮+ অক্ষর)"></label><input class="in-f" id="suPass" type="password" minlength="8" autocomplete="new-password" required /></div>
         <div class="field"><label class="l" for="suPass2" data-i="Confirm password|আবার দিন"></label><input class="in-f" id="suPass2" type="password" minlength="8" autocomplete="new-password" required /></div>
       </div>
-      <div class="field hidden" id="suCodeBox"><label class="l" for="suCode" data-i="6-digit code sent to your mobile|মোবাইলে আসা ৬ সংখ্যার কোড"></label><input class="in-f otp" id="suCode" inputmode="numeric" autocomplete="one-time-code" maxlength="6" />
+      <div class="field" id="suChBox"><label class="l" data-i="Verify my account by|অ্যাকাউন্ট যাচাই করবো"></label>
+        <div class="tabs" id="suTabs" style="margin:0">
+          <button type="button" data-ch="sms" class="on" data-i="📱 Mobile SMS code|📱 মোবাইল SMS কোড"></button>
+          <button type="button" data-ch="email" data-i="✉️ Email code|✉️ ইমেইল কোড"></button>
+        </div></div>
+      <div class="field hidden" id="suCodeBox"><label class="l" for="suCode" id="suCodeLbl" data-i="6-digit code|৬ সংখ্যার কোড"></label><input class="in-f otp" id="suCode" inputmode="numeric" autocomplete="one-time-code" maxlength="6" />
         <div class="small" id="suCodeInfo" style="margin-top:6px"></div></div>
-      <button class="btn p w" type="submit" id="suBtn" data-i="Send code to my mobile|মোবাইলে কোড পাঠান"></button>
-      <p class="small center" style="margin:12px 0 0" data-i="We verify your mobile number with an SMS code. After you log in you will add your photo; the admin then approves your account.|SMS কোড দিয়ে মোবাইল নম্বর যাচাই হবে। লগইনের পর প্রোফাইল ছবি দেবেন, তারপর অ্যাডমিন অনুমোদন দেবেন।"></p>
+      <button class="btn p w" type="submit" id="suBtn" data-i="Send verification code|যাচাইয়ের কোড পাঠান"></button>
+      <p class="small center" style="margin:12px 0 0" data-i="We send a 6-digit code to your mobile or email. After you log in you will add your photo; the admin then approves your account.|আপনার মোবাইল বা ইমেইলে ৬ সংখ্যার কোড যাবে। লগইনের পর প্রোফাইল ছবি দেবেন, তারপর অ্যাডমিন অনুমোদন দেবেন।"></p>
     </form>
 
     <!-- forgot: step 1 -->
@@ -195,7 +200,15 @@
   }
   document.querySelectorAll('#authTabs button').forEach(function (b) { b.onclick = function () { authTab(b.dataset.t); }; });
   $('toForgot').onclick = function () { var v = $('liEmail').value.trim(); if (/@/.test(v)) $('fgEmail').value = v; else if (v) $('fgPhone').value = v; authTab('forgot'); };
-  $('toSmsLogin').onclick = function () { var v = $('liEmail').value.trim(); if (v && !/@/.test(v)) $('slPhone').value = v; authTab('sms'); };
+  $('toSmsLogin').onclick = function () { var v = $('liEmail').value.trim(); if (v) $('slPhone').value = v; authTab('sms'); };
+  // কোন পদ্ধতিতে কোড পাঠানো যায় (SMS / ইমেইল) — সার্ভার জানায়
+  var CH = { sms: true, email: false };
+  if (SCS.configured) SCS.callFn('password-reset', { action: 'channels' }, { anon: true }).then(function (r) {
+    CH = r || CH;
+    if (!CH.sms && CH.email) { su.ch = 'email'; paintSuTabs(); }
+  }).catch(function () {});
+  /** মোবাইল বা ইমেইল দেখে কোন চ্যানেল */
+  function idBody(v) { v = String(v || '').trim(); return /@/.test(v) ? { channel: 'email', email: v } : { channel: 'sms', phone: v }; }
   document.querySelectorAll('[data-back]').forEach(function (b) { b.onclick = function () { authTab('login'); }; });
   function busy(form, on) { form.querySelectorAll('button').forEach(function (b) { b.disabled = on; }); }
   function isPhone(v) { return /^(\+?88)?01[3-9]\d{8}$/.test(String(v || '').replace(/[\s-]/g, '')); }
@@ -220,22 +233,29 @@
   /* ---------- login with SMS code ---------- */
   $('slSend').onclick = function () {
     var ph = $('slPhone').value.trim();
-    if (!isPhone(ph)) { msg('authMsg', T('Enter a valid mobile number (01XXXXXXXXX).', 'সঠিক মোবাইল নম্বর দিন (01XXXXXXXXX)।'), 'bad'); return; }
+    if (!isPhone(ph) && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(ph)) { msg('authMsg', T('Enter your mobile number (01XXXXXXXXX) or email.', 'মোবাইল নম্বর (01XXXXXXXXX) বা ইমেইল দিন।'), 'bad'); return; }
     $('slSend').disabled = true; msg('authMsg', '');
-    sms({ action: 'send', purpose: 'login', phone: ph }).then(function (r) {
+    sms(Object.assign({ action: 'send', purpose: 'login' }, idBody(ph))).then(function (r) {
       msg('authMsg', T('Code sent to ', 'কোড পাঠানো হয়েছে: ') + r.to, 'ok'); $('slCode').focus();
     }).catch(function (er) { msg('authMsg', SCS.err(er), 'bad'); }).then(function () { setTimeout(function () { $('slSend').disabled = false; }, 30000); });
   };
   $('fSmsLogin').onsubmit = function (e) {
     e.preventDefault(); var f = e.target; busy(f, true); msg('authMsg', '');
-    sms({ action: 'login', phone: $('slPhone').value.trim(), code: $('slCode').value.replace(/\D/g, '') }).then(function (r) {
+    sms(Object.assign({ action: 'login', code: $('slCode').value.replace(/\D/g, '') }, idBody($('slPhone').value))).then(function (r) {
       return sb.auth.verifyOtp({ token_hash: r.token_hash, type: 'magiclink' });
     }).then(function (r) { if (r && r.error) throw r.error; busy(f, false); route(); })
       .catch(function (er) { busy(f, false); msg('authMsg', SCS.err(er), 'bad'); });
   };
 
   /* ---------- sign up: mobile SMS code (no email needed) ---------- */
-  var su = { codeSent: false };
+  var su = { codeSent: false, ch: 'sms' };
+  function paintSuTabs() {
+    document.querySelectorAll('#suTabs button').forEach(function (b) { b.classList.toggle('on', b.dataset.ch === su.ch); });
+    su.codeSent = false; $('suCodeBox').classList.add('hidden');
+    $('suBtn').textContent = su.ch === 'email' ? T('Send code to my email', 'ইমেইলে কোড পাঠান') : T('Send code to my mobile', 'মোবাইলে কোড পাঠান');
+  }
+  document.querySelectorAll('#suTabs button').forEach(function (b) { b.onclick = function () { su.ch = b.dataset.ch; paintSuTabs(); msg('authMsg', ''); }; });
+  function suSendBody(d) { return su.ch === 'email' ? { action: 'send', purpose: 'signup', channel: 'email', email: d.email } : { action: 'send', purpose: 'signup', channel: 'sms', phone: d.phone }; }
   function suData() {
     return { full_name: $('suName').value.trim(), phone: $('suPhone').value.replace(/[\s-]/g, ''), email: $('suEmail').value.trim(), password: $('suPass').value };
   }
@@ -254,20 +274,24 @@
     if (!isPhone(d.phone)) { msg('authMsg', T('Enter a valid mobile number (01XXXXXXXXX).', 'সঠিক মোবাইল নম্বর দিন (01XXXXXXXXX)।'), 'bad'); return; }
     busy(f, true); msg('authMsg', '');
     if (!su.codeSent) {
-      sms({ action: 'send', purpose: 'signup', phone: d.phone }).then(function (r) {
+      if (su.ch === 'email' && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(d.email)) { busy(f, false); msg('authMsg', T('Enter a valid email.', 'সঠিক ইমেইল দিন।'), 'bad'); return; }
+      sms(suSendBody(d)).then(function (r) {
         busy(f, false); su.codeSent = true;
         $('suCodeBox').classList.remove('hidden');
         $('suCodeInfo').innerHTML = esc(T('Code sent to ', 'কোড পাঠানো হয়েছে: ') + r.to) + ' · <button type="button" class="link" id="suResend">' + T('Send again', 'আবার পাঠান') + '</button>';
         $('suBtn').textContent = T('Create account', 'অ্যাকাউন্ট খুলুন');
         $('suCode').focus();
       }).catch(function (er) {
-        // SMS গেটওয়ে সেট না থাকলে (প্রথম অ্যাডমিন) -> ইমেইল দিয়ে অ্যাকাউন্ট
-        if (/not set up|turned off|function not found|Server error 404/i.test(er.message)) { msg('authMsg', T('SMS is not set up yet — creating the account with email instead…', 'SMS এখনো সেট হয়নি — ইমেইল দিয়ে অ্যাকাউন্ট তৈরি হচ্ছে…'), 'info'); emailSignup(d, f); return; }
+        // বেছে নেওয়া পদ্ধতি সেট না থাকলে: অন্যটা চালু থাকলে সেটা বলি, নইলে Supabase ইমেইল দিয়ে অ্যাকাউন্ট
+        if (/not set up|turned off/i.test(er.message) && ((su.ch === 'sms' && CH.email) || (su.ch === 'email' && CH.sms))) {
+          busy(f, false); msg('authMsg', su.ch === 'sms' ? T('SMS is not set up yet — choose "Email code".', 'SMS এখনো সেট হয়নি — "ইমেইল কোড" বেছে নিন।') : T('Email is not set up yet — choose "Mobile SMS code".', 'ইমেইল এখনো সেট হয়নি — "মোবাইল SMS কোড" বেছে নিন।'), 'bad'); return;
+        }
+        if (/not set up|turned off|function not found|Server error 404/i.test(er.message)) { msg('authMsg', T('Codes are not set up yet — creating the account with email instead…', 'কোড পাঠানো এখনো সেট হয়নি — ইমেইল দিয়ে অ্যাকাউন্ট তৈরি হচ্ছে…'), 'info'); emailSignup(d, f); return; }
         busy(f, false); msg('authMsg', SCS.err(er), 'bad');
       });
       return;
     }
-    sms({ action: 'signup', phone: d.phone, code: $('suCode').value.replace(/\D/g, ''), email: d.email, password: d.password, full_name: d.full_name }).then(function () {
+    sms({ action: 'signup', channel: su.ch, phone: d.phone, code: $('suCode').value.replace(/\D/g, ''), email: d.email, password: d.password, full_name: d.full_name }).then(function () {
       return sb.auth.signInWithPassword({ email: d.email, password: d.password });
     }).then(function (r) {
       busy(f, false);
@@ -278,12 +302,14 @@
   document.addEventListener('click', function (e) {
     if (e.target.id !== 'suResend') return;
     var d = suData();
-    sms({ action: 'send', purpose: 'signup', phone: d.phone }).then(function (r) { toast(T('Code sent again', 'কোড আবার পাঠানো হয়েছে')); }).catch(function (er) { msg('authMsg', SCS.err(er), 'bad'); });
+    sms(suSendBody(d)).then(function (r) { toast(T('Code sent again', 'কোড আবার পাঠানো হয়েছে')); }).catch(function (er) { msg('authMsg', SCS.err(er), 'bad'); });
   });
-  $('suPhone').addEventListener('input', function () { su.codeSent = false; $('suCodeBox').classList.add('hidden'); $('suBtn').textContent = T('Send code to my mobile', 'মোবাইলে কোড পাঠান'); });
+  $('suPhone').addEventListener('input', function () { if (su.ch === 'sms') paintSuTabs(); });
+  $('suEmail').addEventListener('input', function () { if (su.ch === 'email') paintSuTabs(); });
+  paintSuTabs();
 
   /* ---------- forgot password (email code / link, or mobile SMS code) ---------- */
-  var fg = { mode: 'sms', email: '', phone: '' };
+  var fg = { mode: 'sms', email: '', phone: '', via: 'fn' };
   document.querySelectorAll('#fgTabs button').forEach(function (b) {
     b.onclick = function () {
       fg.mode = b.dataset.m;
@@ -295,9 +321,17 @@
   });
   function sendCode() {
     if (fg.mode === 'email') {
-      return sb.auth.resetPasswordForEmail(fg.email, { redirectTo: location.origin + '/' }).then(function (r) {
-        if (r.error) throw r.error;
-        return T('We emailed a 6-digit code to ', '৬ সংখ্যার কোড পাঠানো হয়েছে: ') + fg.email + T('. (You can also just click the link in that email.)', '। (ইমেইলের লিংকে ক্লিক করেও রিসেট করা যায়।)');
+      fg.via = 'fn';
+      return sms({ action: 'send', purpose: 'reset', channel: 'email', email: fg.email }).then(function (r) {
+        return T('We emailed a 6-digit code to ', '৬ সংখ্যার কোড ইমেইলে পাঠানো হয়েছে: ') + r.to;
+      }, function (er) {
+        if (!/not set up|function not found|Server error 404/i.test(er.message)) throw er;
+        // SMTP সেট না থাকলে Supabase এর নিজের ইমেইল
+        fg.via = 'supabase';
+        return sb.auth.resetPasswordForEmail(fg.email, { redirectTo: location.origin + '/' }).then(function (r) {
+          if (r.error) throw r.error;
+          return T('We emailed a 6-digit code to ', '৬ সংখ্যার কোড পাঠানো হয়েছে: ') + fg.email + T('. (You can also just click the link in that email.)', '। (ইমেইলের লিংকে ক্লিক করেও রিসেট করা যায়।)');
+        });
       });
     }
     return sms({ action: 'send', purpose: 'reset', phone: fg.phone }).then(function (r) {
@@ -324,7 +358,11 @@
     if (pass !== $('cdPass2').value) { msg('authMsg', T('The two passwords do not match.', 'দুটি পাসওয়ার্ড মিলছে না।'), 'bad'); return; }
     busy(f, true); msg('authMsg', '');
     var p;
-    if (fg.mode === 'email') {
+    if (fg.mode === 'email' && fg.via === 'fn') {
+      p = sms({ action: 'verify', channel: 'email', email: fg.email, code: code, password: pass }).then(function (r) {
+        return sb.auth.signInWithPassword({ email: r.email, password: pass });
+      }).then(function (r) { if (r && r.error) throw r.error; });
+    } else if (fg.mode === 'email') {
       p = sb.auth.verifyOtp({ email: fg.email, token: code, type: 'recovery' }).then(function (r) {
         if (r.error) throw new Error(/expired|invalid/i.test(r.error.message) ? T('Wrong or expired code.', 'কোড ভুল বা মেয়াদ শেষ।') : r.error.message);
         return sb.auth.updateUser({ password: pass });

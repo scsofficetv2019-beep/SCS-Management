@@ -131,14 +131,20 @@ export default async (req) => {
       return json(200, { publicKey: v.publicKey });
     }
     if (req.method !== 'POST') return json(405, { error: 'GET or POST only' });
+    let body = {};
+    try { body = await req.json(); } catch {}
+    const subject = 'https://' + new URL(req.url).host;
+    // ডাটাবেস (নতুন অর্ডার/আবেদন, হাজিরার রিমাইন্ডার) নিজেই ডাকে — গোপন cron_key দিয়ে
+    if (body.cronKey) {
+      const [k] = await rest('/rest/v1/sys_secrets?key=eq.cron_key&select=value');
+      if (!k || !k.value || k.value !== String(body.cronKey)) return json(401, { error: 'Bad key' });
+      return json(200, { ok: true, ...(await dispatch(subject)) });
+    }
     const token = (req.headers.get('authorization') || '').replace(/^Bearer\s+/i, '');
     if (!token) return json(401, { error: 'Login required' });
     const u = await fetch(URL_ + '/auth/v1/user', { headers: { apikey: ANON, Authorization: 'Bearer ' + token } });
     if (!u.ok) return json(401, { error: 'Login required' });
     const user = await u.json();
-    let body = {};
-    try { body = await req.json(); } catch {}
-    const subject = 'https://' + new URL(req.url).host;
 
     if (body.test) {
       await rest('/rest/v1/notifications', { method: 'POST', prefer: 'return=minimal', body: { user_id: user.id, app_key: 'core', title: 'SCS Management', body: 'Test notification — push notifications are working on this device.', url: '/' } });

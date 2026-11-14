@@ -744,6 +744,10 @@
     SCS.applyLogo();
     if (!me || !slot) return;
     if (me.active && !slot.querySelector('[data-scs-activity]')) slot.appendChild(SCS.makeActivityBtn(''));
+    // সাইটের ঠিকানা ডাটাবেসে (সার্ভার থেকে পুশ নোটিফিকেশন / রিমাইন্ডারের জন্য)
+    if (me.isSuper && !/^(localhost|127\.|\[::1\])/.test(location.hostname) && ls('scs_site_saved') !== location.origin) {
+      sb.from('sys_settings').upsert({ key: 'site', value: { url: location.origin } }).then(function (r) { if (r && !r.error) ls('scs_site_saved', location.origin); });
+    }
     var g = SCS.makeGear({ onLang: function () { location.reload(); } });
     slot.appendChild(g);
     SCS.startNotifications();

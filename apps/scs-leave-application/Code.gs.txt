@@ -1,0 +1,939 @@
+var APP_CONFIG = {
+  EMPLOYEE_SHEET: "Employee List",
+  APPLICATION_SHEET: "Leave Applications",
+  LEAVE_RECORD_SHEET: "Leave Record",
+  CONFIG_SHEET: "App Config",
+  NOTIFICATION_SHEET: "Notifications",
+  TIMEZONE: "Asia/Dhaka",
+  LOGIN_PIN: "2019",
+  ADMIN_PIN: "2026",
+};
+
+var DEFAULT_GLOBAL_LEAVE_TYPES =
+  "Casual Leave, Physical Leave, Family Problem Leave, Weeding Leave, Other";
+var DEFAULT_GLOBAL_APPROVERS = "Mr. Ujjal Majumder, Shamiran Halder";
+
+function doGet() {
+  initializeSystem_();
+  return HtmlService.createTemplateFromFile("Index")
+    .evaluate()
+    .setTitle("SCS LEAVE APPLICATION")
+    .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL)
+    .addMetaTag("viewport", "width=device-width, initial-scale=1.0");
+}
+
+function include(filename) {
+  return HtmlService.createHtmlOutputFromFile(filename).getContent();
+}
+
+function getBootstrapData() {
+  initializeSystem_();
+  return {
+    ok: true,
+    employees: getEmployees_(),
+    applications: getApplications_(),
+    globalConfig: getGlobalConfig_(),
+    notifications: getNotifications_(),
+    serverTime: nowDhaka_(),
+    adminPinLen: getAdminPinLen_(),
+    logo: getLogo_(),
+    notifyEmails: PropertiesService.getScriptProperties().getProperty("NOTIFY_EMAILS") || "",
+  };
+}
+
+function submitLeaveApplication(payload) {
+  try {
+    initializeSystem_();
+    if (!payload || !payload.employeeId) {
+      return { ok: false, error: "Invalid payload" };
+    }
+    var emp = findEmployeeById_(payload.employeeId);
+    if (!emp) {
+      return { ok: false, error: "Employee not found" };
+    }
+
+    var sheet = getSheet_(APP_CONFIG.APPLICATION_SHEET);
+    var appId = generateLeaveId_();
+    sheet.appendRow([
+      nowDhaka_(),
+      appId,
+      emp.employeeId,
+      emp.name,
+      emp.designation,
+      emp.mobile,
+      payload.fromDate,
+      payload.toDate,
+      Number(payload.totalDays) || 0,
+      payload.leaveType || "",
+      Number(emp.acceptableLeaveDays) || 12,
+      payload.description || "",
+      "Pending",
+      "",
+    ]);
+
+    addNotification_(emp.name + " applied: " + (Number(payload.totalDays) || 0) + " day(s)");
+    sendNotifyMail_(emp.name + " applied for leave", emp.name + " (" + emp.employeeId + ") applied for " + (Number(payload.totalDays) || 0) + " day(s): " + payload.fromDate + " to " + payload.toDate + ". Application ID: " + appId);
+    formatApplicationSheet_();
+    updateLeaveRecordSheet_();
+    return getBootstrapData();
+  } catch (err) {
+    return { ok: false, error: err.toString() };
+  }
+}
+
+function splitNames_(v) {
+  return String(v || "").split(",").map(function(x) { return x.trim(); }).filter(Boolean);
+}
+
+// একাধিক অ্যাপ্রুভার: কমপক্ষে একজন অ্যাপ্রুভ করলেই স্ট্যাটাস Approved
+function approveApplication(applicationId, approverName, adminPin) {
+  try {
+    if (!verifyAdminPin_(adminPin)) return { ok: false, error: "Invalid admin PIN" };
+    initializeSystem_();
+    var sheet = getSheet_(APP_CONFIG.APPLICATION_SHEET);
+    var data = sheet.getDataRange().getValues();
+    for (var i = 1; i < data.length; i++) {
+      if (String(data[i][1]) === String(applicationId)) {
+        var emp = findEmployeeById_(String(data[i][2]));
+        var name = String(approverName || "").trim() ||
+          (emp && emp.approvedBy ? splitNames_(emp.approvedBy)[0] : "Admin");
+        var cur = splitNames_(data[i][13]);
+        if (cur.indexOf(name) < 0) cur.push(name);
+        sheet.getRange(i + 1, 13).setValue("Approved");
+        sheet.getRange(i + 1, 14).setValue(cur.join(", "));
+        addNotification_("Approved by " + name + ": " + (emp ? emp.name : applicationId));
+        formatApplicationSheet_();
+        updateLeaveRecordSheet_();
+        return getBootstrapData();
+      }
+    }
+    return { ok: false, error: "Application not found" };
+  } catch (err) {
+    return { ok: false, error: err.toString() };
+  }
+}
+
+// approverName দিলে শুধু সেই ব্যক্তির অ্যাপ্রুভ সরবে; কেউ না থাকলে Pending
+function unapproveApplication(applicationId, approverName, adminPin) {
+  try {
+    if (!verifyAdminPin_(adminPin)) return { ok: false, error: "Invalid admin PIN" };
+    initializeSystem_();
+    var sheet = getSheet_(APP_CONFIG.APPLICATION_SHEET);
+    var data = sheet.getDataRange().getValues();
+    for (var i = 1; i < data.length; i++) {
+      if (String(data[i][1]) === String(applicationId)) {
+        var name = String(approverName || "").trim();
+        var cur = name ? splitNames_(data[i][13]).filter(function(x) { return x !== name; }) : [];
+        sheet.getRange(i + 1, 13).setValue(cur.length ? "Approved" : "Pending");
+        sheet.getRange(i + 1, 14).setValue(cur.join(", "));
+        addNotification_((name ? "Approval removed (" + name + "): " : "Moved to pending: ") + applicationId);
+        formatApplicationSheet_();
+        updateLeaveRecordSheet_();
+        return getBootstrapData();
+      }
+    }
+    return { ok: false, error: "Application not found" };
+  } catch (err) {
+    return { ok: false, error: err.toString() };
+  }
+}
+
+// অ্যাডমিন থেকে আবেদন মডিফাই
+function updateApplication(applicationId, f, adminPin) {
+  try {
+    if (!verifyAdminPin_(adminPin)) return { ok: false, error: "Invalid Admin PIN" };
+    initializeSystem_();
+    var sheet = getSheet_(APP_CONFIG.APPLICATION_SHEET);
+    var data = sheet.getDataRange().getValues();
+    for (var i = 1; i < data.length; i++) {
+      if (String(data[i][1]) === String(applicationId)) {
+        sheet.getRange(i + 1, 7, 1, 4).setValues([[String(f.fromDate || ""), String(f.toDate || ""), Number(f.totalDays) || 0, String(f.leaveType || "")]]);
+        sheet.getRange(i + 1, 12).setValue(String(f.description || ""));
+        addNotification_("Application modified: " + applicationId);
+        formatApplicationSheet_();
+        updateLeaveRecordSheet_();
+        return getBootstrapData();
+      }
+    }
+    return { ok: false, error: "Application not found" };
+  } catch (err) {
+    return { ok: false, error: err.toString() };
+  }
+}
+
+function deleteApplication(applicationId, approvalPin) {
+  try {
+    if (!verifyAdminPin_(approvalPin)) {
+      return { ok: false, error: "Invalid Admin PIN" };
+    }
+    initializeSystem_();
+    var sheet = getSheet_(APP_CONFIG.APPLICATION_SHEET);
+    var data = sheet.getDataRange().getValues();
+    for (var i = 1; i < data.length; i++) {
+      if (String(data[i][1]) === String(applicationId)) {
+        sheet.deleteRow(i + 1);
+        addNotification_("Application deleted: " + applicationId);
+        formatApplicationSheet_();
+        updateLeaveRecordSheet_();
+        return getBootstrapData();
+      }
+    }
+    return { ok: false, error: "Application not found" };
+  } catch (err) {
+    return { ok: false, error: err.toString() };
+  }
+}
+
+function saveEmployee(employee, approvalPin) {
+  try {
+    if (!verifyAdminPin_(approvalPin)) {
+      return { ok: false, error: "Invalid Admin PIN" };
+    }
+    initializeSystem_();
+    var sheet = getSheet_(APP_CONFIG.EMPLOYEE_SHEET);
+    var data = sheet.getDataRange().getValues();
+    var targetRow = -1;
+    for (var i = 1; i < data.length; i++) {
+      if (String(data[i][4]) === String(employee.employeeId)) {
+        targetRow = i + 1;
+        break;
+      }
+    }
+
+    var row = [
+      employee.slNo || (data.length || 1),
+      employee.name || "",
+      employee.designation || "",
+      employee.mobile || "",
+      employee.employeeId || "",
+      employee.photo || "",
+      Number(employee.acceptableLeaveDays) || 12,
+      employee.typeOfLeave || getGlobalConfig_().leaveTypes,
+      employee.approvedBy || getGlobalConfig_().approvers,
+    ];
+
+    if (targetRow > 0) {
+      sheet.getRange(targetRow, 1, 1, 9).setValues([row]);
+      addNotification_("Employee updated: " + employee.employeeId);
+    } else {
+      sheet.appendRow(row);
+      addNotification_("Employee added: " + employee.employeeId);
+    }
+
+    formatEmployeeSheet_();
+    updateLeaveRecordSheet_();
+    return getBootstrapData();
+  } catch (err) {
+    return { ok: false, error: err.toString() };
+  }
+}
+
+function deleteEmployee(employeeId, approvalPin) {
+  try {
+    if (!verifyAdminPin_(approvalPin)) {
+      return { ok: false, error: "Invalid Admin PIN" };
+    }
+    initializeSystem_();
+
+    var empSheet = getSheet_(APP_CONFIG.EMPLOYEE_SHEET);
+    var empData = empSheet.getDataRange().getValues();
+    for (var i = 1; i < empData.length; i++) {
+      if (String(empData[i][4]) === String(employeeId)) {
+        empSheet.deleteRow(i + 1);
+        break;
+      }
+    }
+
+    var appSheet = getSheet_(APP_CONFIG.APPLICATION_SHEET);
+    var appData = appSheet.getDataRange().getValues();
+    for (var j = appData.length - 1; j >= 1; j--) {
+      if (String(appData[j][2]) === String(employeeId)) {
+        appSheet.deleteRow(j + 1);
+      }
+    }
+
+    addNotification_("Employee deleted: " + employeeId);
+    formatEmployeeSheet_();
+    formatApplicationSheet_();
+    updateLeaveRecordSheet_();
+    return getBootstrapData();
+  } catch (err) {
+    return { ok: false, error: err.toString() };
+  }
+}
+
+function saveGlobalConfig(leaveTypes, approvers, applyAll, approvalPin) {
+  try {
+    if (!verifyAdminPin_(approvalPin)) {
+      return { ok: false, error: "Invalid Admin PIN" };
+    }
+    initializeSystem_();
+    var cfg = getSheet_(APP_CONFIG.CONFIG_SHEET);
+    cfg.getRange("B2").setValue(leaveTypes || defaultLeaveTypes_());
+    cfg.getRange("B3").setValue(approvers || defaultApprovers_());
+
+    if (applyAll) {
+      var emp = getSheet_(APP_CONFIG.EMPLOYEE_SHEET);
+      var lastRow = emp.getLastRow();
+      if (lastRow >= 2) {
+        emp.getRange(2, 8, lastRow - 1, 1).setValue(leaveTypes || defaultLeaveTypes_());
+        emp.getRange(2, 9, lastRow - 1, 1).setValue(approvers || defaultApprovers_());
+      }
+      addNotification_("Global config applied to all employees");
+    }
+
+    formatEmployeeSheet_();
+    return getBootstrapData();
+  } catch (err) {
+    return { ok: false, error: err.toString() };
+  }
+}
+
+function syncNow() {
+  initializeSystem_();
+  formatEmployeeSheet_();
+  formatApplicationSheet_();
+  updateLeaveRecordSheet_();
+  return getBootstrapData();
+}
+
+function verifyLoginPin(pin) {
+  return { ok: String(pin || "").trim() === APP_CONFIG.LOGIN_PIN };
+}
+
+function verifyAdminPin(pin) {
+  return { ok: verifyAdminPin_(pin) };
+}
+
+// পুরনো নামের সাথে সামঞ্জস্য রাখার জন্য (Approver -> Admin)
+function verifyApproverPin(pin) {
+  return verifyAdminPin(pin);
+}
+
+function initializeSystem_() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+
+  var emp = getSheet_(APP_CONFIG.EMPLOYEE_SHEET);
+  if (emp.getLastRow() === 0) {
+    emp.appendRow([
+      "SL",
+      "Employee Name",
+      "Designation",
+      "Mobile",
+      "Employee ID",
+      "Photo",
+      "Acceptable Leave Days",
+      "Type Of Leave",
+      "Approved By",
+    ]);
+    var samples = [
+      [1, "Mr. Samiron Halder", "General Manager", "01711-504432", "201901", "", 12, defaultLeaveTypes_(), "Mr. Ujjal Majumder"],
+      [2, "Mr. Ujjal Majumder", "Senior Manager-Technical Service", "01711-928645", "201902", "", 12, defaultLeaveTypes_(), "Mr. Samiron Halder"],
+      [3, "Malay Kanti Mallick", "Senior Executive Sales & Marketing", "01728-915049", "201903", "", 12, defaultLeaveTypes_(), defaultApprovers_()],
+      [4, "Malay Bepari", "Executive Sales & Marketing", "01725-594588", "201904", "", 12, defaultLeaveTypes_(), defaultApprovers_()],
+      [5, "Sabuj Halder Rocky", "Executive Sales & Marketing", "01725-594389", "201906", "", 12, defaultLeaveTypes_(), defaultApprovers_()],
+    ];
+    emp.getRange(2, 1, samples.length, 9).setValues(samples);
+  }
+
+  var app = getSheet_(APP_CONFIG.APPLICATION_SHEET);
+  if (app.getLastRow() === 0) {
+    app.appendRow([
+      "Timestamp",
+      "LA ID",
+      "Employee ID",
+      "Employee Name",
+      "Designation",
+      "Mobile",
+      "From Date",
+      "To Date",
+      "Total Days",
+      "Leave Type",
+      "Acceptable Leave Days",
+      "Description",
+      "Status",
+      "Approved By",
+    ]);
+  }
+
+  var rec = getSheet_(APP_CONFIG.LEAVE_RECORD_SHEET);
+  if (rec.getLastRow() === 0) {
+    rec.appendRow(["Leave Record Matrix"]);
+  }
+
+  var cfg = getSheet_(APP_CONFIG.CONFIG_SHEET);
+  if (cfg.getLastRow() === 0) {
+    cfg.appendRow(["Key", "Value"]);
+    cfg.appendRow(["Global Leave Types", defaultLeaveTypes_()]);
+    cfg.appendRow(["Global Approvers", defaultApprovers_()]);
+  }
+
+  var notes = getSheet_(APP_CONFIG.NOTIFICATION_SHEET);
+  if (notes.getLastRow() === 0) {
+    notes.appendRow(["Timestamp", "Message"]);
+  }
+
+  // Heavy formatting and matrix rebuild are invoked explicitly by write/sync operations.
+}
+
+function getSheet_(name) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sh = ss.getSheetByName(name);
+  if (!sh) sh = ss.insertSheet(name);
+  return sh;
+}
+
+function getEmployees_() {
+  var sheet = getSheet_(APP_CONFIG.EMPLOYEE_SHEET);
+  var data = sheet.getDataRange().getValues();
+  var out = [];
+  for (var i = 1; i < data.length; i++) {
+    if (!data[i][4]) continue;
+    var rawPhoto = String(data[i][5] || "");
+    out.push({
+      slNo: Number(data[i][0]) || i,
+      name: String(data[i][1] || ""),
+      designation: String(data[i][2] || ""),
+      mobile: String(data[i][3] || ""),
+      employeeId: String(data[i][4] || ""),
+      photo: formatPhotoUrl_(rawPhoto),
+      acceptableLeaveDays: Number(data[i][6]) || 12,
+      typeOfLeave: String(data[i][7] || defaultLeaveTypes_()),
+      approvedBy: String(data[i][8] || defaultApprovers_()),
+      _i: i,
+    });
+  }
+  out.sort(function(a, b) { return (a.slNo - b.slNo) || (a._i - b._i); });
+  out.forEach(function(e) { delete e._i; });
+  return out;
+}
+
+function findEmployeeById_(empId) {
+  var list = getEmployees_();
+  for (var i = 0; i < list.length; i++) {
+    if (String(list[i].employeeId) === String(empId)) return list[i];
+  }
+  return null;
+}
+
+function getApplications_() {
+  var sheet = getSheet_(APP_CONFIG.APPLICATION_SHEET);
+  var data = sheet.getDataRange().getValues();
+  var out = [];
+  for (var i = 1; i < data.length; i++) {
+    if (!data[i][1]) continue;
+    out.push({
+      timestamp: stampStr_(data[i][0]),
+      applicationId: String(data[i][1] || ""),
+      employeeId: String(data[i][2] || ""),
+      employeeName: String(data[i][3] || ""),
+      designation: String(data[i][4] || ""),
+      mobile: String(data[i][5] || ""),
+      fromDate: dayStr_(data[i][6]),
+      toDate: dayStr_(data[i][7]),
+      totalDays: Number(data[i][8]) || 0,
+      leaveType: String(data[i][9] || ""),
+      acceptableLeaveDays: Number(data[i][10]) || 12,
+      description: String(data[i][11] || ""),
+      status: String(data[i][12] || "Pending"),
+      approvedBy: String(data[i][13] || ""),
+    });
+  }
+  return out;
+}
+
+function getGlobalConfig_() {
+  var cfg = getSheet_(APP_CONFIG.CONFIG_SHEET);
+  return {
+    leaveTypes: String(cfg.getRange("B2").getValue() || defaultLeaveTypes_()),
+    approvers: String(cfg.getRange("B3").getValue() || defaultApprovers_()),
+  };
+}
+
+function getNotifications_() {
+  var sheet = getSheet_(APP_CONFIG.NOTIFICATION_SHEET);
+  var data = sheet.getDataRange().getValues();
+  var out = [];
+  for (var i = data.length - 1; i >= 1; i--) {
+    out.push({
+      id: String(i),
+      message: String(data[i][1] || ""),
+      time: stampStr_(data[i][0]),
+      read: false,
+    });
+    if (out.length >= 50) break;
+  }
+  return out;
+}
+
+function addNotification_(message) {
+  var sh = getSheet_(APP_CONFIG.NOTIFICATION_SHEET);
+  sh.appendRow([nowDhaka_(), message]);
+}
+
+function generateLeaveId_() {
+  var now = new Date();
+  var y = now.getFullYear();
+  var m = Utilities.formatDate(now, APP_CONFIG.TIMEZONE, "MM");
+  var prefix = "SCS" + y + m + "-";
+  var apps = getApplications_();
+  var count = 0;
+  for (var i = 0; i < apps.length; i++) {
+    if (apps[i].applicationId.indexOf(prefix) === 0) count += 1;
+  }
+  return prefix + ("0" + (count + 1)).slice(-2);
+}
+
+function formatEmployeeSheet_() {
+  var sh = getSheet_(APP_CONFIG.EMPLOYEE_SHEET);
+  var lr = sh.getLastRow();
+  var lc = 9;
+  if (lr < 1) return;
+  sh.getRange(1, 1, lr, lc)
+    .setHorizontalAlignment("center")
+    .setVerticalAlignment("middle")
+    .setBorder(true, true, true, true, true, true, "#cbd5e1", SpreadsheetApp.BorderStyle.SOLID);
+  sh.getRange(1, 1, 1, lc)
+    .setBackground("#1e3a8a")
+    .setFontColor("#ffffff")
+    .setFontWeight("bold");
+  sh.getRange(1, 1, lr, lc).setBorder(true, true, true, true, null, null, "#0f172a", SpreadsheetApp.BorderStyle.SOLID_MEDIUM);
+  sh.autoResizeColumns(1, lc);
+}
+
+function formatApplicationSheet_() {
+  var sh = getSheet_(APP_CONFIG.APPLICATION_SHEET);
+  var lr = sh.getLastRow();
+  var lc = 14;
+  if (lr < 1) return;
+  sh.getRange(1, 1, lr, lc)
+    .setHorizontalAlignment("center")
+    .setVerticalAlignment("middle")
+    .setBorder(true, true, true, true, true, true, "#cbd5e1", SpreadsheetApp.BorderStyle.SOLID);
+  sh.getRange(1, 1, 1, lc)
+    .setBackground("#1e3a8a")
+    .setFontColor("#ffffff")
+    .setFontWeight("bold");
+  if (lr >= 2) {
+    var data = sh.getRange(2, 1, lr - 1, lc).getValues();
+    for (var i = 0; i < data.length; i++) {
+      var row = i + 2;
+      var status = String(data[i][12] || "Pending");
+      sh.getRange(row, 2).setFontWeight("bold").setFontColor("#4338ca");
+      sh.getRange(row, 9).setFontWeight("bold");
+      if (status === "Approved") {
+        sh.getRange(row, 13).setBackground("#dcfce7").setFontColor("#166534").setFontWeight("bold");
+      } else {
+        sh.getRange(row, 13).setBackground("#fef3c7").setFontColor("#854d0e").setFontWeight("bold");
+      }
+    }
+  }
+  sh.getRange(1, 1, lr, lc).setBorder(true, true, true, true, null, null, "#0f172a", SpreadsheetApp.BorderStyle.SOLID_MEDIUM);
+  sh.autoResizeColumns(1, lc);
+}
+
+function updateLeaveRecordSheet_() {
+  var sh = getSheet_(APP_CONFIG.LEAVE_RECORD_SHEET);
+  sh.clear();
+
+  var employees = getEmployees_();
+  var apps = getApplications_().filter(function(a) {
+    return a.status === "Approved";
+  });
+
+  if (!employees.length) {
+    sh.getRange(1, 1).setValue("No employees");
+    return;
+  }
+
+  var row = 1;
+  var header = ["EMPLOYEE NAME"];
+  for (var i = 0; i < employees.length; i++) {
+    header.push((i + 1) + ". " + employees[i].name);
+  }
+  sh.getRange(row, 1, 1, header.length).setValues([header]);
+  row += 1;
+
+  var designation = ["Designation"];
+  var mobile = ["Mobile Number"];
+  var empId = ["Employee ID"];
+  for (var j = 0; j < employees.length; j++) {
+    designation.push(employees[j].designation);
+    mobile.push(employees[j].mobile);
+    empId.push(employees[j].employeeId);
+  }
+  sh.getRange(row, 1, 1, designation.length).setValues([designation]);
+  row += 1;
+  sh.getRange(row, 1, 1, mobile.length).setValues([mobile]);
+  row += 1;
+  sh.getRange(row, 1, 1, empId.length).setValues([empId]);
+  row += 1;
+
+  var byEmp = {};
+  var max = 0;
+  for (var k = 0; k < employees.length; k++) {
+    var list = apps.filter(function(a) {
+      return String(a.employeeId) === String(employees[k].employeeId);
+    });
+    byEmp[employees[k].employeeId] = list;
+    if (list.length > max) max = list.length;
+  }
+
+  for (var b = 0; b < max; b++) {
+    sh.getRange(row, 1).setValue("APPROVED LEAVE BLOCK #" + (b + 1));
+    sh.getRange(row, 1, 1, employees.length + 1).merge();
+    row += 1;
+
+    var purpose = ["Purpose of Leave"];
+    var from = ["From"];
+    var to = ["To"];
+    var days = ["Leave of Days"];
+    var appr = ["Approve by"];
+
+    for (var c = 0; c < employees.length; c++) {
+      var app = byEmp[employees[c].employeeId][b];
+      purpose.push(app ? app.leaveType + (app.description ? " - " + app.description : "") : "-");
+      from.push(app ? app.fromDate : "-");
+      to.push(app ? app.toDate : "-");
+      days.push(app ? app.totalDays + " days" : "-");
+      appr.push(app ? app.approvedBy : "-");
+    }
+
+    sh.getRange(row, 1, 1, purpose.length).setValues([purpose]);
+    row += 1;
+    sh.getRange(row, 1, 1, from.length).setValues([from]);
+    row += 1;
+    sh.getRange(row, 1, 1, to.length).setValues([to]);
+    row += 1;
+    sh.getRange(row, 1, 1, days.length).setValues([days]);
+    row += 1;
+    sh.getRange(row, 1, 1, appr.length).setValues([appr]);
+    row += 1;
+  }
+
+  var totalRow = ["Total (Total Approved Days)"];
+  var balanceRow = ["Leave Balance (Remaining Days)"];
+  for (var d = 0; d < employees.length; d++) {
+    var taken = byEmp[employees[d].employeeId].reduce(function(sum, a) {
+      return sum + Number(a.totalDays || 0);
+    }, 0);
+    totalRow.push(taken + " days");
+    balanceRow.push(Math.max(0, employees[d].acceptableLeaveDays - taken) + " days");
+  }
+  sh.getRange(row, 1, 1, totalRow.length).setValues([totalRow]);
+  row += 1;
+  sh.getRange(row, 1, 1, balanceRow.length).setValues([balanceRow]);
+
+  var lastCol = employees.length + 1;
+  var lastRow = sh.getLastRow();
+  sh.getRange(1, 1, lastRow, lastCol)
+    .setHorizontalAlignment("center")
+    .setVerticalAlignment("middle")
+    .setBorder(true, true, true, true, true, true, "#94a3b8", SpreadsheetApp.BorderStyle.SOLID);
+  sh.getRange(1, 1, 1, lastCol)
+    .setBackground("#1d4ed8")
+    .setFontColor("#ffffff")
+    .setFontWeight("bold");
+  sh.autoResizeColumns(1, lastCol);
+}
+
+function nowDhaka_() {
+  return Utilities.formatDate(new Date(), APP_CONFIG.TIMEZONE, "yyyy-MM-dd HH:mm:ss");
+}
+
+function sha256_(text) {
+  return Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, "scs|" + text, Utilities.Charset.UTF_8)
+    .map(function(b) { return ("0" + (b & 255).toString(16)).slice(-2); }).join("");
+}
+
+function verifyAdminPin_(pin) {
+  pin = String(pin || "").trim();
+  var props = PropertiesService.getScriptProperties();
+  var hash = props.getProperty("ADMIN_PIN_HASH");
+  return hash ? sha256_(pin) === hash : pin === APP_CONFIG.ADMIN_PIN;
+}
+
+function getAdminPinLen_() {
+  return Number(PropertiesService.getScriptProperties().getProperty("ADMIN_PIN_LEN")) || 4;
+}
+
+// অ্যাডমিন পিন পরিবর্তন: ৪ থেকে ৮ ডিজিট
+function changeAdminPin(oldPin, newPin) {
+  try {
+    newPin = String(newPin || "").trim();
+    if (!verifyAdminPin_(oldPin)) return { ok: false, error: "Current admin PIN is wrong" };
+    if (!/^\d{4,8}$/.test(newPin)) return { ok: false, error: "Admin PIN must be 4 to 8 digits" };
+    if (newPin.indexOf(APP_CONFIG.LOGIN_PIN) === 0) return { ok: false, error: "Admin PIN cannot start with the user PIN" };
+    var props = PropertiesService.getScriptProperties();
+    props.setProperty("ADMIN_PIN_HASH", sha256_(newPin));
+    props.setProperty("ADMIN_PIN_LEN", String(newPin.length));
+    return { ok: true, adminPinLen: newPin.length };
+  } catch (err) {
+    return { ok: false, error: err.toString() };
+  }
+}
+
+function defaultLeaveTypes_() {
+  return DEFAULT_GLOBAL_LEAVE_TYPES;
+}
+
+function defaultApprovers_() {
+  return DEFAULT_GLOBAL_APPROVERS;
+}
+
+function formatPhotoUrl_(raw) {
+  if (!raw) return "";
+  var str = String(raw).trim();
+  if (!str) return "";
+
+  // Handle formula like =IMAGE("https://...")
+  var urlMatch = str.match(/https?:\/\/[^\s"')>]+/);
+  if (urlMatch && urlMatch[0]) {
+    str = urlMatch[0];
+  }
+
+  var fileId = extractDriveFileId_(str);
+  if (fileId) {
+    return "https://drive.google.com/thumbnail?id=" + fileId + "&sz=w1000";
+  }
+
+  if (str.indexOf("dropbox.com") !== -1) {
+    return str.replace(/\?dl=0/, "?raw=1").replace(/\?dl=1/, "?raw=1");
+  }
+
+  return str;
+}
+
+function extractDriveFileId_(url) {
+  if (!url) return "";
+  var str = String(url).trim();
+  if (!str) return "";
+
+  var m = str.match(/\/file\/d\/([a-zA-Z0-9_-]+)/) ||
+          str.match(/[?&]id=([a-zA-Z0-9_-]+)/) ||
+          str.match(/\/d\/([a-zA-Z0-9_-]+)/) ||
+          str.match(/drive\.google\.com\/open\?.*id=([a-zA-Z0-9_-]+)/) ||
+          str.match(/drive\.google\.com\/uc\?.*id=([a-zA-Z0-9_-]+)/);
+  if (m && m[1]) return m[1];
+
+  if (/^[a-zA-Z0-9_-]{25,60}$/.test(str)) return str;
+  return "";
+}
+
+// ---------- তারিখ: শুধু yyyy-MM-dd / yyyy-MM-dd HH:mm ----------
+function dayStr_(v) {
+  if (v instanceof Date) return Utilities.formatDate(v, APP_CONFIG.TIMEZONE, "yyyy-MM-dd");
+  var s = String(v || "");
+  if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10);
+  var d = new Date(s);
+  return isNaN(d.getTime()) ? s : Utilities.formatDate(d, APP_CONFIG.TIMEZONE, "yyyy-MM-dd");
+}
+
+function stampStr_(v) {
+  if (v instanceof Date) return Utilities.formatDate(v, APP_CONFIG.TIMEZONE, "yyyy-MM-dd HH:mm");
+  var s = String(v || "");
+  if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 16);
+  var d = new Date(s);
+  return isNaN(d.getTime()) ? s : Utilities.formatDate(d, APP_CONFIG.TIMEZONE, "yyyy-MM-dd HH:mm");
+}
+
+// ---------- কোম্পানির লোগো (অ্যাডমিন থেকে সেট) ----------
+function getLogo_() {
+  var props = PropertiesService.getScriptProperties();
+  var n = Number(props.getProperty("LOGO_N")) || 0, out = "";
+  for (var i = 0; i < n; i++) out += props.getProperty("LOGO_" + i) || "";
+  return out;
+}
+
+function setLogo(dataUrl, adminPin) {
+  try {
+    if (!verifyAdminPin_(adminPin)) return { ok: false, error: "Invalid Admin PIN" };
+    dataUrl = String(dataUrl || "");
+    if (dataUrl && (dataUrl.indexOf("data:image/") !== 0 || dataUrl.length > 60000)) return { ok: false, error: "Logo is too large" };
+    var props = PropertiesService.getScriptProperties();
+    var old = Number(props.getProperty("LOGO_N")) || 0;
+    for (var i = 0; i < old; i++) props.deleteProperty("LOGO_" + i);
+    var n = 0;
+    for (var p = 0; p < dataUrl.length; p += 8000) { props.setProperty("LOGO_" + n, dataUrl.slice(p, p + 8000)); n++; }
+    props.setProperty("LOGO_N", String(n));
+    return getBootstrapData();
+  } catch (err) {
+    return { ok: false, error: err.toString() };
+  }
+}
+
+
+// ---------- ক্রমিক নম্বর (Serial) ----------
+function setEmployeeSerial(employeeId, newSl, adminPin) {
+  try {
+    if (!verifyAdminPin_(adminPin)) return { ok: false, error: "Invalid Admin PIN" };
+    var sheet = getSheet_(APP_CONFIG.EMPLOYEE_SHEET);
+    var data = sheet.getDataRange().getValues();
+    var list = [];
+    for (var i = 1; i < data.length; i++) {
+      if (!data[i][4]) continue;
+      list.push({ row: i + 1, id: String(data[i][4]), sl: Number(data[i][0]) || i, idx: i });
+    }
+    list.sort(function(a, b) { return (a.sl - b.sl) || (a.idx - b.idx); });
+    var from = -1;
+    for (var k = 0; k < list.length; k++) if (list[k].id === String(employeeId)) from = k;
+    if (from < 0) return { ok: false, error: "Employee not found" };
+    var to = Math.max(0, Math.min(list.length - 1, Number(newSl) - 1));
+    var item = list.splice(from, 1)[0];
+    list.splice(to, 0, item);
+    for (var n = 0; n < list.length; n++) sheet.getRange(list[n].row, 1).setValue(n + 1);
+    return getBootstrapData();
+  } catch (err) {
+    return { ok: false, error: err.toString() };
+  }
+}
+
+// ---------- প্রিন্টের জন্য কর্মীর ছবি (base64) ----------
+function getPhotosData() {
+  var out = {};
+  var cache = CacheService.getScriptCache();
+  getEmployees_().forEach(function(e) {
+    if (!e.photo) return;
+    var key = "ph_" + e.employeeId + "_" + e.photo.length;
+    var hit = cache.get(key);
+    if (hit) { out[e.employeeId] = hit; return; }
+    try {
+      var blob = null, id = extractDriveFileId_(e.photo);
+      if (id) {
+        var f = DriveApp.getFileById(id);
+        blob = f.getThumbnail() || f.getBlob();
+      } else {
+        blob = UrlFetchApp.fetch(e.photo, { muteHttpExceptions: true }).getBlob();
+      }
+      if (blob) {
+        var data = "data:" + (blob.getContentType() || "image/jpeg") + ";base64," + Utilities.base64Encode(blob.getBytes());
+        if (data.length < 90000) { cache.put(key, data, 21600); out[e.employeeId] = data; }
+      }
+    } catch (err) {}
+  });
+  return { ok: true, photos: out };
+}
+
+// ---------- নতুন আবেদনের ইমেইল নোটিফিকেশন (ফোনের নোটিফিকেশন বারে আসে) ----------
+function sendNotifyMail_(subject, body) {
+  try {
+    var to = PropertiesService.getScriptProperties().getProperty("NOTIFY_EMAILS") || "";
+    if (to) MailApp.sendEmail(to, "SCS Leave: " + subject, body);
+  } catch (err) {}
+}
+
+function setNotifyEmails(emails, adminPin) {
+  try {
+    if (!verifyAdminPin_(adminPin)) return { ok: false, error: "Invalid Admin PIN" };
+    PropertiesService.getScriptProperties().setProperty("NOTIFY_EMAILS", String(emails || "").trim());
+    return getBootstrapData();
+  } catch (err) {
+    return { ok: false, error: err.toString() };
+  }
+}
+
+// ---------- সিরিয়াল ক্রম একসাথে সেভ ----------
+function saveSerialOrder(orderedIds, adminPin) {
+  try {
+    if (!verifyAdminPin_(adminPin)) return { ok: false, error: "Invalid Admin PIN" };
+    var sheet = getSheet_(APP_CONFIG.EMPLOYEE_SHEET);
+    var data = sheet.getDataRange().getValues();
+    var rowOf = {};
+    for (var i = 1; i < data.length; i++) if (data[i][4]) rowOf[String(data[i][4])] = i + 1;
+    (orderedIds || []).forEach(function(id, n) {
+      if (rowOf[String(id)]) sheet.getRange(rowOf[String(id)], 1).setValue(n + 1);
+    });
+    return getBootstrapData();
+  } catch (err) {
+    return { ok: false, error: err.toString() };
+  }
+}
+
+
+// ---------- সিগনেচার ও ইনিশিয়াল (কর্মী: emp:ID, অ্যাপ্রুভার: apr:নাম) ----------
+function getSignatures() {
+  try {
+    var sh = getSheet_("Signatures");
+    if (sh.getLastRow() < 1) sh.getRange(1, 1, 1, 3).setValues([["Key", "Signature", "Initial"]]);
+    var data = sh.getDataRange().getValues(), out = {};
+    for (var i = 1; i < data.length; i++) {
+      if (data[i][0]) out[String(data[i][0])] = { s: String(data[i][1] || ""), i: String(data[i][2] || "") };
+    }
+    return { ok: true, sigs: out };
+  } catch (err) {
+    return { ok: false, error: err.toString() };
+  }
+}
+
+// which: "s" = সিগনেচার, "i" = ইনিশিয়াল; ফাঁকা দিলে মুছে যায়
+function setSignature(key, which, dataUrl, adminPin) {
+  try {
+    if (!verifyAdminPin_(adminPin)) return { ok: false, error: "Invalid Admin PIN" };
+    dataUrl = String(dataUrl || "");
+    if (dataUrl && (dataUrl.indexOf("data:image/") !== 0 || dataUrl.length > 46000)) return { ok: false, error: "Image is too large" };
+    var sh = getSheet_("Signatures");
+    if (sh.getLastRow() < 1) sh.getRange(1, 1, 1, 3).setValues([["Key", "Signature", "Initial"]]);
+    var data = sh.getDataRange().getValues(), row = -1;
+    for (var i = 1; i < data.length; i++) if (String(data[i][0]) === String(key)) row = i + 1;
+    if (row < 0) { row = sh.getLastRow() + 1; sh.getRange(row, 1).setValue(String(key)); }
+    sh.getRange(row, which === "i" ? 3 : 2).setValue(dataUrl);
+    return getSignatures();
+  } catch (err) {
+    return { ok: false, error: err.toString() };
+  }
+}
+
+
+// ---------- অ্যাপ্রুভারের নাম এডিট / ক্রম ----------
+function csvList_(v) {
+  return String(v || "").split(",").map(function(x) { return x.trim(); }).filter(Boolean);
+}
+
+function mapColumn_(sheet, col, fn) {
+  var last = sheet.getLastRow();
+  if (last < 2) return;
+  var rng = sheet.getRange(2, col, last - 1, 1);
+  rng.setValues(rng.getValues().map(function(r) { return [fn(r[0])]; }));
+}
+
+// নাম বদলালে গ্লোবাল তালিকা, সব কর্মী, সব আবেদন ও সিগনেচার একসাথে বদলে যায়
+function renameApprover(oldName, newName, adminPin) {
+  try {
+    if (!verifyAdminPin_(adminPin)) return { ok: false, error: "Invalid Admin PIN" };
+    oldName = String(oldName || "").trim();
+    newName = String(newName || "").trim();
+    if (!oldName || !newName) return { ok: false, error: "Name is required" };
+    initializeSystem_();
+    var swap = function(v) { return csvList_(v).map(function(x) { return x === oldName ? newName : x; }).join(", "); };
+    var cfg = getSheet_(APP_CONFIG.CONFIG_SHEET);
+    cfg.getRange("B3").setValue(swap(cfg.getRange("B3").getValue()));
+    mapColumn_(getSheet_(APP_CONFIG.EMPLOYEE_SHEET), 9, swap);
+    mapColumn_(getSheet_(APP_CONFIG.APPLICATION_SHEET), 14, swap);
+    var sg = getSheet_("Signatures"), d = sg.getDataRange().getValues();
+    for (var i = 1; i < d.length; i++) if (String(d[i][0]) === "apr:" + oldName) sg.getRange(i + 1, 1).setValue("apr:" + newName);
+    try { formatApplicationSheet_(); updateLeaveRecordSheet_(); } catch (e) {}
+    return getBootstrapData();
+  } catch (err) {
+    return { ok: false, error: err.toString() };
+  }
+}
+
+// অ্যাপ্রুভারদের ক্রম/নতুন নাম/মুছে ফেলা একসাথে সেভ
+function saveApproverOrder(names, removed, adminPin) {
+  try {
+    if (!verifyAdminPin_(adminPin)) return { ok: false, error: "Invalid Admin PIN" };
+    names = (names || []).map(function(x) { return String(x).trim(); }).filter(Boolean);
+    removed = (removed || []).map(function(x) { return String(x).trim(); });
+    initializeSystem_();
+    var rank = function(n) { var i = names.indexOf(n); return i < 0 ? 999 : i; };
+    var sortBy = function(arr) { return arr.sort(function(a, b) { return rank(a) - rank(b); }); };
+    getSheet_(APP_CONFIG.CONFIG_SHEET).getRange("B3").setValue(names.join(", "));
+    mapColumn_(getSheet_(APP_CONFIG.EMPLOYEE_SHEET), 9, function(v) {
+      return sortBy(csvList_(v).filter(function(x) { return removed.indexOf(x) < 0; })).join(", ");
+    });
+    mapColumn_(getSheet_(APP_CONFIG.APPLICATION_SHEET), 14, function(v) { return sortBy(csvList_(v)).join(", "); });
+    return getBootstrapData();
+  } catch (err) {
+    return { ok: false, error: err.toString() };
+  }
+}

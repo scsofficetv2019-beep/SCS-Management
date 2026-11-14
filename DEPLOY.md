@@ -1,7 +1,7 @@
 # SCS Management — A to Z ডিপ্লয়মেন্ট নোট (Netlify + Supabase)
 
 > এই ফাইলটা প্রতিবার কোড বদলানোর পর আপডেট রাখা হয়। নতুন Netlify বা Supabase অ্যাকাউন্টে শুরু থেকে সেটআপ করতে শুধু এই নোট অনুসরণ করুন।
-> শেষ আপডেট: 2026-11-13 (ডাটাবেস ভার্সন 3)
+> শেষ আপডেট: 2026-11-15 (ডাটাবেস ভার্সন 4)
 
 ## 🔄 আপডেট লগ — প্রতিবার কী Run/আপলোড করতে হবে
 
@@ -9,6 +9,7 @@ SQL কোড সবসময় `supabase/schema.sql` ফাইলে থাক
 
 | তারিখ | SQL Run লাগবে? | কী আপলোড করবেন | কী বদলেছে |
 |---|---|---|---|
+| 2026-11-15 (v4) | **হ্যাঁ** — পুরো `supabase/schema.sql` | সব ফাইল, বিশেষ করে নতুন `apps/leave/` ফোল্ডার, `netlify/lib/` ফোল্ডার, `netlify/functions/`, `netlify.toml`, `index.html`, `admin.html`, `migrate.html`, `assets/scs-core.js`, `apps/chemical-order/` | নতুন অ্যাপ **SCS Leave Application** (SCS অ্যাকাউন্ট দিয়ে, নিজের ছুটির আবেদন, অ্যাপ্রুভ/রিজেক্ট, লাইভ আপডেট); কোডেই SMS ও Gmail SMTP সেটিং (`netlify/lib/server-config.mjs`); ইমেইলে কোড দিয়ে অ্যাকাউন্ট/লগইন/রিসেট; কাস্টমাইজ করা যায় এমন নোটিফিকেশন (Admin Console → Notifications & Log); সকাল/সন্ধ্যায় ক্লক ইন/আউট রিমাইন্ডার; Activity Log-এ পিন/পাসওয়ার্ড লুকানো ও কে কী দেখবে; Chemical Order হিস্ট্রিতে আজ/এই মাস/গত মাস ফিল্টার আর মার্ক করে ডিলিট |
 | 2026-11-13 (v3.1) | **না** — নতুন SQL লাগবে না (v3-এর `schema.sql` আগে Run করে থাকলে যথেষ্ট) | `admin.html`, `index.html`, `activity.html`, `assets/scs-core.js`, `assets/portal.css` | ইউজার ক্লিক করলে "উধাও" হওয়া ঠিক (কারণ: ব্রাউজার সেভ করা ইমেইল সার্চ বক্সে অটোফিল করছিল), নতুন Users & access UI (পরিসংখ্যান কার্ড, অনুমোদনের অপেক্ষার তালিকা, ক্লিক করলে ম্যানেজ পপআপ), হোম পেজ থেকে Recent activity সরিয়ে টপ বারে 🕘 আইকন |
 | 2026-11-13 (v3) | **হ্যাঁ** — পুরো `supabase/schema.sql` | সব ফাইল (বিশেষ করে `index.html`, `admin.html`, `profile.html`, `assets/`, `apps/`, `netlify/functions/`, `netlify.toml`) | SMS কোড দিয়ে অ্যাকাউন্ট খোলা/লগইন, "Unregistered API key" ঠিক, অনুমোদন ঠিক, Employee ID বদলানো যায়, টপ বারে হোম বাটন, গোলাপি হোম পেজ, Google Drive অটো ব্যাকআপ + রিস্টোর |
 | 2026-11-13 (v2) | হ্যাঁ | সব ফাইল | প্রোফাইল = এমপ্লয়ি, অ্যাডমিন পিন, নোটিফিকেশন, লোগো, Admin Console |
@@ -74,6 +75,28 @@ Authentication → Emails → **SMTP Settings** → Enable custom SMTP। উদ
 মোবাইল SMS দিয়ে রিসেট (Admin Console → SMS gateway) ইমেইল ছাড়াই কাজ করে।
 
 **A7. কী তিনটা কপি করুন:** Project URL, anon public key, service_role key।
+
+---
+
+## A8. SMS ও ইমেইল কোড — ডিপ্লয়ের আগেই কোডে বসানো (সুপারিশ)
+
+এটা করলে কোনো অ্যাকাউন্টে লগইন করার আগেই, প্রথম দিন থেকে অ্যাকাউন্ট খোলার কোড SMS বা ইমেইলে যাবে।
+ফাইল: `netlify/lib/server-config.mjs` (Notepad দিয়ে খুলে শুধু `''` এর ভেতরে লিখুন):
+
+| ঘর | কী বসাবেন |
+|---|---|
+| `sms.apiUrl` | SMS পাঠানোর এন্ডপয়েন্ট লিংক (যেমন `https://bulksmsbd.net/api/smsapi`) |
+| `sms.apiKey` | আপনার SMS API key |
+| `sms.senderId` | Sender ID / Masking ID |
+| `sms.params` | SMS কোম্পানি কোন নামে তথ্য চায় (BulkSMSBD: `api_key`, `message`, `number`, `senderid`) |
+| `smtp.user` | আপনার Gmail ঠিকানা |
+| `smtp.pass` | Gmail **App Password** (১৬ অক্ষর): Google Account → Security → 2-Step Verification চালু → App passwords → নাম দিন "SCS" → Create |
+
+- এই ফাইল ওয়েবসাইট থেকে খোলা যায় না (`netlify.toml` ব্লক করে)। তবুও GitHub repo **Private** রাখবেন।
+- ফাইলে না লিখে Netlify → Environment variables-এও দিতে পারেন: `SMS_API_URL`, `SMS_API_KEY`, `SMS_SENDER_ID`, `SMTP_USER`, `SMTP_PASS` (থাকলে এগুলোই আগে ব্যবহার হয়)।
+- পরে Admin Console → **SMS & Email** থেকে বদলানো যায়। সেখানে সেভ করা সেটিং সবার আগে ব্যবহার হয়।
+- যাচাই: Admin Console → SMS & Email → **Server check** দেখাবে `SMS gateway: configured (...)` আর `Email (SMTP): configured (...)`। তারপর *Send test SMS* / *Send test email*।
+- ইমেইল কোড আমাদের নিজের Gmail দিয়ে যায়, তাই Supabase-এর "email rate limit" আর লাগে না (Gmail দিনে প্রায় ৫০০ ইমেইল)।
 
 ---
 
@@ -175,7 +198,44 @@ service_role key কোনো ফাইলে পাওয়া গেলে �
 
 ---
 
+## I. SCS Leave Application (নতুন অ্যাপ)
+
+1. `schema.sql` Run করলে অ্যাপটা নিজে থেকেই হোম পেজে আসে (🌴)। প্রতিটা অনুমোদিত এমপ্লয়ি অ্যাকাউন্ট কর্মী হিসেবে যোগ হয়।
+2. Admin Console → Users → কর্মীর উপর ক্লিক → **Leave Application: User বা Admin** দিন।
+   - **User**: শুধু নিজের জন্য *New Application* দিতে পারে, ড্যাশবোর্ড আর লিভ রেকর্ড দেখে।
+   - **Admin**: অ্যাডমিন পিন দিয়ে Admin খুলে অ্যাপ্রুভ / রিজেক্ট / এডিট, কর্মীর কোটা, ছুটির ধরন, অ্যাপ্রুভার, সিগনেচার।
+3. অ্যাডমিন পিন: Admin Console → Apps & admin PINs → Leave Application (ডিফল্ট `2026`)।
+4. **পুরনো Google Sheet থেকে ডাটা আনা:**
+   - পুরনো শিট খুলে প্রতিটা ট্যাব আলাদা করে File → Download → **CSV** করুন: `Employee List`, `Leave Applications`, `App Config`, `Signatures`।
+   - Admin Console → Tools → **Data migration** → "Leave Application (CSV)" অংশে ফাইলগুলো দিন → *Leave ডাটা ইমপোর্ট করুন*।
+   - একই LA ID আবার এলে আপডেট হয়, ডুপ্লিকেট হয় না। পুরনো আবেদনের জন্য নোটিফিকেশন যায় না।
+   - যার SCS অ্যাকাউন্ট আছে: Admin Console → Users → তার Employee ID শিটের ID-র মতো করে দিন (যেমন `201903`)। পুরনো ছুটির ইতিহাস নিজে থেকেই তার অ্যাকাউন্টে জুড়ে যাবে।
+5. `apps/scs-leave-application/` ফোল্ডারটা শুধু পুরনো সোর্স (রেফারেন্স)। আপলোড করলেও ক্ষতি নেই, ওয়েবে খোলা যায় না।
+
+## J. নোটিফিকেশন ও রিমাইন্ডার
+
+- Admin Console → **Notifications & Log**: প্রতিটা নোটিফিকেশন চালু/বন্ধ আর কে পাবে (সব ইউজার / অ্যাপের Admin / শুধু Super Admin / শুধু সংশ্লিষ্ট ব্যক্তি)।
+  - নতুন অ্যাকাউন্ট → Super Admin। অ্যাকাউন্ট অনুমোদন → সেই ব্যক্তি।
+  - নতুন ছুটির আবেদন → Leave অ্যাপের Admin। অ্যাপ্রুভ/রিজেক্ট → শুধু আবেদনকারী।
+  - নতুন অর্ডার → Chemical Order-এর সব ইউজার।
+  - **Clock IN রিমাইন্ডার** অফিস শুরুর সময়ে, **Clock OUT রিমাইন্ডার** অফিস শেষের সময়ে। সময় Attendance অ্যাপের Office Settings থেকে আসে।
+    যে এখনো ক্লক ইন করেনি শুধু সে পায়, অনুমোদিত ছুটিতে থাকলে পায় না। শুক্রবার আর ছুটির দিনে যায় না। "minutes after office time"-এ -10 দিলে ১০ মিনিট আগে যায়।
+- অ্যাপ বন্ধ থাকলেও ফোনে পুশ যেতে হলে:
+  - Supabase → Database → Extensions-এ `pg_cron` আর `pg_net` চালু থাকতে হবে।
+  - Super Admin অন্তত একবার আসল সাইট (Netlify ঠিকানা) খুলবেন। এতে সাইটের ঠিকানা ডাটাবেসে সেভ হয়।
+  - প্রত্যেক ইউজার ⚙️ → Push notifications চালু করবেন।
+- **Activity Log**: পিন, পাসওয়ার্ড, টোকেন, API key কখনো লগে দেখায় না, পুরনো লগ থেকেও লুকানো হয়েছে।
+  একই পেজে টিক তুলে দিলে কোন ধরনের লগ সাধারণ ইউজার দেখবে না সেটা ঠিক করা যায় (যেমন সেটিংস)। Super Admin ও অ্যাপের Admin সব দেখেন।
+- Chemical Order → **History**: আজ / গতকাল / গত ৭ দিন / এই মাস / গত মাস / তারিখ বেছে, আর অর্ডার / প্রোডাক্ট / সেলার / সেটিংস দিয়ে ফিল্টার।
+  Admin **Mark & delete** দিয়ে বেছে বেছে মুছতে পারেন।
+
+---
+
 ## G. চেকলিস্ট (সব ঠিক আছে কি না)
+
+- [ ] Create account → "Email code" বেছে নিলে ইমেইলে কোড আসে (A8)।
+- [ ] Leave Application খোলে, New Application দিলে Admin-এর কাছে নোটিফিকেশন যায়, অ্যাপ্রুভ করলে আবেদনকারী পান।
+- [ ] অফিস শুরুর সময় ক্লক ইন না করা ইউজার রিমাইন্ডার পান।
 
 - [ ] সাইট খুললে লগইন পেজ আসে, "Setup pending" নয় → `config.js` ঠিক আছে।
 - [ ] অ্যাকাউন্ট খোলার কনফার্মেশন লিংক Netlify সাইটে নিয়ে যায় → A3 ঠিক আছে।
@@ -197,6 +257,9 @@ service_role key কোনো ফাইলে পাওয়া গেলে �
 | রিসেট/কনফার্ম লিংক localhost-এ যায় | A3 করা হয়নি বা পুরনো ঠিকানা আছে |
 | "Netlify function not found" / SMS যায় না | Drag & Drop দিয়ে ডিপ্লয় হয়েছে, GitHub দিয়ে করুন। অথবা env vars নেই, যোগ করে Trigger deploy দিন |
 | "Unregistered API key" / "Invalid API key" | Netlify env var-এর Supabase key ভুল, অন্য প্রজেক্টের, বা rotate করা পুরনো key। Supabase থেকে আবার কপি করে বসান (আগে-পিছে ফাঁকা জায়গা ছাড়া) → Trigger deploy। Admin Console → SMS gateway → **Server check** দিয়ে যাচাই করুন |
+| "Email could not be sent: SMTP (login) → 535 ..." | Gmail App Password ভুল, অথবা সাধারণ Gmail পাসওয়ার্ড দেওয়া হয়েছে। 2-Step Verification চালু করে নতুন App Password বানান |
+| Leave অ্যাপে "Employee not found" / New Application ফাঁকা | অ্যাকাউন্টটি অনুমোদিত এমপ্লয়ি নয় (Admin Console → Users → "Show in Employee Attendance" টিক, Active), অথবা schema.sql v4 Run হয়নি |
+| রিমাইন্ডার / পুশ আসে না | pg_cron ও pg_net চালু করে schema.sql আবার Run করুন। Super Admin একবার আসল সাইট খুলুন। ইউজারের Push চালু আছে কি না দেখুন |
 | SMS টেস্টে "SMS provider: ..." | এই মেসেজ SMS কোম্পানির: API key, Sender ID, ব্যালান্স বা IP whitelist চেক করুন |
 | Admin Console-এ লাল "database is not up to date" | সর্বশেষ `supabase/schema.sql` পুরোটা Run করুন |
 | ইউজার তালিকা থেকে কেউ "উধাও" হয়ে যায় | সার্চ বক্সে কিছু লেখা আছে কি না দেখুন। হলুদ "Search: … showing x / y" বারে **Clear search** চাপুন (v3.1-এ ব্রাউজারের অটোফিল বন্ধ করা হয়েছে) |

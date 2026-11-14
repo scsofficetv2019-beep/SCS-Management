@@ -25,7 +25,8 @@
     <button type="button" data-tab="users" class="on">👥 <span data-i="Users & access|ইউজার ও অ্যাক্সেস"></span> <span id="cPending"></span></button>
     <button type="button" data-tab="apps">🧩 <span data-i="Apps & admin PINs|অ্যাপ ও অ্যাডমিন পিন"></span></button>
     <button type="button" data-tab="brand">🖼️ <span data-i="Logo|লোগো"></span></button>
-    <button type="button" data-tab="sms">✉️ <span data-i="SMS gateway|SMS গেটওয়ে"></span></button>
+    <button type="button" data-tab="sms">✉️ <span data-i="SMS & Email|SMS ও ইমেইল"></span></button>
+    <button type="button" data-tab="notif">🔔 <span data-i="Notifications & Log|নোটিফিকেশন ও লগ"></span></button>
     <button type="button" data-tab="backup">☁️ <span data-i="Backup|ব্যাকআপ"></span></button>
     <button type="button" data-tab="tools">🧰 <span data-i="Tools|টুলস"></span></button>
   </div>
@@ -94,6 +95,41 @@
       <div class="toolbar" style="margin:0"><input class="in-f" id="smsTo" placeholder="01XXXXXXXXX" style="max-width:220px" /><button class="btn g" type="button" id="smsTest" data-i="Send test SMS|টেস্ট SMS পাঠান"></button>
         <button class="btn g" type="button" id="srvCheck" data-i="Server check|সার্ভার চেক"></button></div>
       <pre id="srvOut" class="small hidden" style="white-space:pre-wrap;background:var(--soft);border:1px solid var(--line);border-radius:12px;padding:12px;margin:12px 0 0"></pre>
+      <p class="small" style="margin:12px 0 0" data-ih="Tip: you can also put the SMS and email settings in the code file <code>netlify/lib/server-config.mjs</code> (or Netlify environment variables) so codes work from the first deploy. Settings saved here are used first.|টিপস: SMS ও ইমেইল সেটিং কোড ফাইল <code>netlify/lib/server-config.mjs</code> এ (বা Netlify Environment variables এ) দিলে প্রথম ডিপ্লয় থেকেই কোড যায়। এখানে সেভ করা সেটিং আগে ব্যবহার হয়।"></p>
+    </div>
+
+    <div class="card pad" style="max-width:640px;margin-top:16px">
+      <h2 class="h2" data-i="Email (SMTP) — codes by email|ইমেইল (SMTP) — ইমেইলে কোড"></h2>
+      <p class="small" style="margin-top:-4px" data-i="Used for sign-up, login and password reset codes by email. Gmail: host smtp.gmail.com, port 465, your Gmail address and a 16-letter App Password (Google Account → Security → 2-Step Verification → App passwords).|ইমেইলে অ্যাকাউন্ট খোলা, লগইন ও পাসওয়ার্ড রিসেট কোড পাঠাতে। Gmail: host smtp.gmail.com, port 465, আপনার Gmail ঠিকানা আর ১৬ অক্ষরের App Password (Google Account → Security → 2-Step Verification → App passwords)।"></p>
+      <div id="mailMsg"></div>
+      <label class="switch" style="margin-bottom:14px"><input type="checkbox" id="mailOn" checked /> <span data-i="Email codes enabled|ইমেইল কোড চালু"></span></label>
+      <div class="row2">
+        <div class="field"><label class="l">SMTP host</label><input class="in-f" id="mailHost" placeholder="smtp.gmail.com" /></div>
+        <div class="field"><label class="l">Port</label><input class="in-f" id="mailPort" type="number" placeholder="465" /></div>
+      </div>
+      <div class="row2">
+        <div class="field"><label class="l" data-i="Email address (login)|ইমেইল ঠিকানা (লগইন)"></label><input class="in-f" id="mailUser" type="email" autocomplete="off" placeholder="yourname@gmail.com" /></div>
+        <div class="field"><label class="l" data-i="App password|অ্যাপ পাসওয়ার্ড"></label><input class="in-f" id="mailPass" type="password" autocomplete="new-password" /></div>
+      </div>
+      <div class="field"><label class="l" data-i="Sender name|প্রেরকের নাম"></label><input class="in-f" id="mailFrom" placeholder="SCS Management" /></div>
+      <button class="btn p" type="button" id="mailSave" data-i="Save email settings|ইমেইল সেটিংস সেভ করুন"></button>
+      <hr style="border:0;border-top:1px solid var(--line);margin:20px 0" />
+      <div class="toolbar" style="margin:0"><input class="in-f" id="mailTo" type="email" placeholder="test@example.com" style="max-width:260px" /><button class="btn g" type="button" id="mailTest" data-i="Send test email|টেস্ট ইমেইল পাঠান"></button></div>
+    </div>
+  </section>
+
+  <!-- NOTIFICATIONS & ACTIVITY LOG -->
+  <section id="tNotif" class="hidden">
+    <div class="card pad sec" style="max-width:900px">
+      <h2 class="h2" data-i="Notifications — who gets what|নোটিফিকেশন — কে কী পাবে"></h2>
+      <p class="small" style="margin-top:-4px" data-i="Turn each notification on or off and choose who receives it. Reminders use the office time from the Attendance app (Friday and holidays are skipped). Everyone gets their own notifications in the app, and on the phone if push notifications are on.|প্রতিটা নোটিফিকেশন চালু/বন্ধ করুন এবং কে পাবে বেছে নিন। রিমাইন্ডার Attendance অ্যাপের অফিস টাইম অনুযায়ী যায় (শুক্রবার ও ছুটির দিনে যায় না)। প্রত্যেকে নিজের নোটিফিকেশন অ্যাপে পান, পুশ চালু থাকলে ফোনেও।"></p>
+      <div id="nrList"><div class="spin"></div></div>
+    </div>
+    <div class="card pad sec" style="max-width:900px">
+      <h2 class="h2" data-i="Activity Log — what normal users can see|Activity Log — সাধারণ ইউজার কী দেখবে"></h2>
+      <p class="small" style="margin-top:-4px" data-i="Super Admins and each app's Admins always see everything. Untick a record type to hide it from normal users (for example settings). PINs, passwords, tokens and API keys are never shown in the log.|Super Admin ও অ্যাপের Admin সবসময় সব দেখেন। কোনো ধরনের টিক তুলে দিলে সাধারণ ইউজার সেটা দেখবে না (যেমন সেটিংস)। পিন, পাসওয়ার্ড, টোকেন ও API key লগে কখনো দেখায় না।"></p>
+      <div id="avList"><div class="spin"></div></div>
+      <button class="btn p" type="button" id="avSave" style="margin-top:12px" data-i="Save visibility|সেভ করুন"></button>
     </div>
   </section>
 
@@ -173,7 +209,7 @@
   'use strict';
   var $ = function (id) { return document.getElementById(id); };
   var T = SCS.t, esc = SCS.esc, sb = SCS.sb;
-  var SCHEMA_NEED = 3;
+  var SCHEMA_NEED = 4;
   var st = { status: 'all', q: '', profiles: [], access: [], apps: [], pins: {}, me: null, keep: {}, flash: '' };
   var tt = null;
   function toast(t) { var e = $('toast'); e.textContent = t; e.classList.remove('hidden'); clearTimeout(tt); tt = setTimeout(function () { e.classList.add('hidden'); }, 3200); }
@@ -182,13 +218,14 @@
   SCS.loadBranding();
 
   /* ---------- tabs ---------- */
-  var TABS = { users: 'tUsers', apps: 'tApps', brand: 'tBrand', sms: 'tSms', backup: 'tBackup', tools: 'tTools' };
+  var TABS = { users: 'tUsers', apps: 'tApps', brand: 'tBrand', sms: 'tSms', notif: 'tNotif', backup: 'tBackup', tools: 'tTools' };
   function tab(k) {
     Object.keys(TABS).forEach(function (x) { $(TABS[x]).classList.toggle('hidden', x !== k); });
     document.querySelectorAll('#tabs button').forEach(function (b) { b.classList.toggle('on', b.dataset.tab === k); });
     history.replaceState(null, '', '#' + k);
     if (k === 'apps') loadApps();
-    if (k === 'sms') loadSms();
+    if (k === 'sms') { loadSms(); loadMail(); }
+    if (k === 'notif') loadNotif();
     if (k === 'backup') loadBackup();
   }
   document.querySelectorAll('#tabs button').forEach(function (b) { b.onclick = function () { tab(b.dataset.tab); }; });
@@ -550,6 +587,106 @@
       .catch(function (e) { toast(SCS.err(e)); }).then(function () { $('smsTest').disabled = false; });
   };
 
+  /* ---------- Email (SMTP) ---------- */
+  function loadMail() {
+    Promise.all([
+      SCS.q(sb.from('sys_settings').select('value').eq('key', 'smtp').maybeSingle()),
+      SCS.q(sb.rpc('sys_secret_status'))
+    ]).then(function (r) {
+      var v = (r[0] && r[0].value) || {}, sec = r[1] || {};
+      $('mailOn').checked = v.enabled !== false;
+      $('mailHost').value = v.host || ''; $('mailPort').value = v.port || ''; $('mailUser').value = v.user || ''; $('mailFrom').value = v.fromName || '';
+      $('mailPass').value = '';
+      $('mailPass').placeholder = sec.smtp_password ? '•••••••• ' + T('(saved — leave blank to keep)', '(সেভ আছে — ফাঁকা রাখলে একই থাকবে)') : T('not set (code file is used if filled)', 'সেট নেই (কোড ফাইলে থাকলে সেটা চলবে)');
+    }).catch(function (e) { $('mailMsg').innerHTML = '<div class="msg bad">' + esc(SCS.err(e)) + '</div>'; });
+  }
+  $('mailSave').onclick = function () {
+    var val = { enabled: $('mailOn').checked, host: $('mailHost').value.trim(), port: Number($('mailPort').value) || 465, user: $('mailUser').value.trim(), fromName: $('mailFrom').value.trim() || 'SCS Management' };
+    if (!val.host || !val.user) { val.host = ''; val.user = ''; }
+    var pass = $('mailPass').value.replace(/\s+/g, '');
+    SCS.q(sb.from('sys_settings').upsert({ key: 'smtp', value: val }))
+      .then(function () { return pass ? SCS.q(sb.rpc('sys_set_secret', { p_key: 'smtp_password', p_value: pass })) : null; })
+      .then(function () { toast(T('Email settings saved', 'ইমেইল সেটিংস সেভ হয়েছে')); loadMail(); })
+      .catch(function (e) { toast(SCS.err(e)); });
+  };
+  $('mailTest').onclick = function () {
+    var to = $('mailTo').value.trim(); if (!to) { toast(T('Enter an email address', 'ইমেইল ঠিকানা দিন')); return; }
+    $('mailTest').disabled = true;
+    SCS.callFn('password-reset', { action: 'testEmail', to: to }).then(function () { toast(T('Test email sent', 'টেস্ট ইমেইল পাঠানো হয়েছে')); })
+      .catch(function (e) { toast(SCS.err(e)); alert(SCS.err(e)); }).then(function () { $('mailTest').disabled = false; });
+  };
+
+  /* ---------- notification rules + activity log visibility ---------- */
+  var AUD = {
+    app_users: ['All users of the app', 'অ্যাপের সব ইউজার'], app_admins: ['Admins of the app', 'অ্যাপের Admin রা'],
+    super_admins: ['Super Admins only', 'শুধু Super Admin'], person: ['Only the person concerned', 'শুধু সংশ্লিষ্ট ব্যক্তি'],
+    person_admins: ['The person + app Admins', 'সংশ্লিষ্ট ব্যক্তি + অ্যাপের Admin']
+  };
+  var KNOWN_TABLES = {
+    'chemical-order': [['chem_orders', 'Orders'], ['chem_products', 'Products'], ['chem_sellers', 'Sellers'], ['chem_settings', 'Settings']],
+    'attendance': [['att_records', 'Attendance records'], ['att_employees', 'Employees'], ['att_settings', 'Settings']],
+    'monthly-report': [['mr_month_data', 'Monthly reports'], ['mr_settings', 'Settings']],
+    'leave': [['leave_applications', 'Leave applications'], ['leave_employees', 'Employees'], ['leave_settings', 'Settings'], ['leave_signatures', 'Signatures & seal']]
+  };
+  var nf = { rules: [], hidden: [] };
+  function appName(k) { var a = st.apps.filter(function (x) { return x.key === k; })[0]; return k === 'core' ? 'SCS Management' : a ? (a.icon || '') + ' ' + a.name.replace(/^SCS /, '') : k; }
+  function loadNotif() {
+    Promise.all([
+      SCS.q(sb.from('notif_rules').select('*').order('sort_order')),
+      SCS.q(sb.from('sys_settings').select('value').eq('key', 'activity_visibility').maybeSingle()),
+      SCS.q(sb.from('audit_log').select('app_key, table_name, entity').neq('app_key', 'core').order('id', { ascending: false }).limit(800)).catch(function () { return []; }),
+      st.apps.length ? Promise.resolve(st.apps) : SCS.q(sb.from('apps').select('*').order('sort_order'))
+    ]).then(function (r) {
+      nf.rules = r[0] || []; nf.hidden = ((r[1] && r[1].value) || {}).hidden || []; st.apps = r[3] || st.apps;
+      (r[2] || []).forEach(function (x) {
+        var L = KNOWN_TABLES[x.app_key] = KNOWN_TABLES[x.app_key] || [];
+        if (!L.some(function (t) { return t[0] === x.table_name; })) L.push([x.table_name, x.entity || x.table_name]);
+      });
+      renderRules(); renderVis();
+    }).catch(function (e) { $('nrList').innerHTML = '<div class="msg bad">' + esc(SCS.err(e)) + '</div>'; });
+  }
+  function renderRules() {
+    $('nrList').innerHTML = nf.rules.length ? nf.rules.map(function (x) {
+      var isRem = /reminder/.test(x.event_key), off = (x.options || {}).offset || 0;
+      return '<div class="arow" data-rule="' + esc(x.event_key) + '"><label class="switch" style="flex:1;min-width:220px"><input type="checkbox" data-nr-on' + (x.enabled ? ' checked' : '') + ' /> <span><b>' + esc(SCS.lang === 'bn' && x.label_bn ? x.label_bn : x.label) + '</b><br><span class="small">' + esc(appName(x.app_key)) + '</span></span></label>' +
+        '<select class="in-f" data-nr-aud style="width:auto;padding:8px 10px">' + Object.keys(AUD).map(function (k) { return '<option value="' + k + '"' + (x.audience === k ? ' selected' : '') + '>' + T(AUD[k][0], AUD[k][1]) + '</option>'; }).join('') + '</select>' +
+        (isRem ? '<label class="small" style="display:flex;align-items:center;gap:6px">' + T('minutes after office time', 'অফিস টাইমের কত মিনিট পরে') + ' <input class="in-f" data-nr-off type="number" style="width:80px;padding:8px" value="' + esc(off) + '" title="' + T('Use a minus number to remind before, e.g. -10', 'আগে মনে করাতে মাইনাস দিন, যেমন -10') + '" /></label>' : '') +
+        '<button type="button" class="btn p s" data-nr-save>' + T('Save', 'সেভ') + '</button></div>';
+    }).join('') : '<div class="msg info">' + T('Run the latest supabase/schema.sql to get notification rules.', 'নোটিফিকেশন নিয়ম পেতে সর্বশেষ supabase/schema.sql Run করুন।') + '</div>';
+  }
+  function renderVis() {
+    $('avList').innerHTML = Object.keys(KNOWN_TABLES).map(function (app) {
+      return '<div style="margin:10px 0"><b>' + esc(appName(app)) + '</b><div class="acc" style="margin-top:6px">' + KNOWN_TABLES[app].map(function (t) {
+        var key = app + ':' + t[0];
+        return '<label class="pill" style="display:flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:12px;padding:6px 10px;background:var(--soft);font-size:12.5px;font-weight:600"><input type="checkbox" data-av="' + esc(key) + '"' + (nf.hidden.indexOf(key) < 0 ? ' checked' : '') + ' /> ' + esc(t[1]) + '</label>';
+      }).join('') + '</div></div>';
+    }).join('');
+  }
+  $('nrList').addEventListener('click', function (e) {
+    var b = e.target.closest('[data-nr-save]'); if (!b) return;
+    var row = b.closest('[data-rule]'), k = row.getAttribute('data-rule'), rule = nf.rules.filter(function (x) { return x.event_key === k; })[0];
+    var upd = { enabled: row.querySelector('[data-nr-on]').checked, audience: row.querySelector('[data-nr-aud]').value };
+    var off = row.querySelector('[data-nr-off]'); if (off) upd.options = Object.assign({}, rule.options || {}, { offset: Number(off.value) || 0 });
+    b.disabled = true;
+    SCS.q(sb.from('notif_rules').update(upd).eq('event_key', k).select('event_key')).then(function (rows) {
+      if (!rows || !rows.length) throw new Error(T('Not saved — run the latest supabase/schema.sql.', 'সেভ হয়নি — সর্বশেষ supabase/schema.sql Run করুন।'));
+      Object.assign(rule, upd); toast(T('Saved', 'সেভ হয়েছে'));
+    }).catch(function (er) { toast(SCS.err(er)); }).then(function () { b.disabled = false; });
+  });
+  $('avSave').onclick = function () {
+    var hidden = [].slice.call(document.querySelectorAll('[data-av]')).filter(function (c) { return !c.checked; }).map(function (c) { return c.getAttribute('data-av'); });
+    SCS.q(sb.from('sys_settings').upsert({ key: 'activity_visibility', value: { hidden: hidden } })).then(function () { nf.hidden = hidden; toast(T('Saved', 'সেভ হয়েছে')); })
+      .catch(function (e) { toast(SCS.err(e)); });
+  };
+  /** সাইটের ঠিকানা মনে রাখা: ডাটাবেস এখান থেকে পুশ নোটিফিকেশন পাঠায় (রিমাইন্ডার, নতুন আবেদন) */
+  function saveSiteUrl() {
+    if (/^(localhost|127\.|\[::1\])/.test(location.hostname)) return;
+    sb.from('sys_settings').select('value').eq('key', 'site').maybeSingle().then(function (r) {
+      var cur = r && r.data && r.data.value && r.data.value.url;
+      if (cur !== location.origin) sb.from('sys_settings').upsert({ key: 'site', value: { url: location.origin } }).then(function () {});
+    });
+  }
+
   /* ---------- backup ---------- */
   var bk = { cfg: {} };
   function randTok() { var a = new Uint8Array(18); crypto.getRandomValues(a); return Array.prototype.map.call(a, function (x) { return ('0' + x.toString(16)).slice(-2); }).join(''); }
@@ -672,7 +809,8 @@
         'Netlify env vars: ' + Object.keys(r.env).map(function (k) { return k + (r.env[k] ? ' ✅' : ' ❌ missing'); }).join(', ') + '\n' +
         'SUPABASE_SERVICE_ROLE_KEY: ' + ok(r.serviceKey) + '\n' +
         'SUPABASE_ANON_KEY: ' + ok(r.anonKey) + '\n' +
-        'SMS gateway: ' + r.sms;
+        'SMS gateway: ' + r.sms + '\n' +
+        'Email (SMTP): ' + (r.email || '—');
     }).catch(function (e) { $('srvOut').textContent = '❌ ' + SCS.err(e); });
   };
 
@@ -682,6 +820,7 @@
     SCS.portalHeader(me, $('topAct'));
     if (!me.isSuper) { document.querySelector('main').innerHTML = '<div class="empty">' + T('Only a Super Admin can open this page.', 'এই পেজ শুধু Super Admin দেখতে পারবেন।') + '</div>'; return; }
     st.me = me;
+    saveSiteUrl();
     var h = (location.hash || '').slice(1);
     if (TABS[h] && h !== 'users') tab(h);
     // ডাটাবেস সর্বশেষ schema.sql দিয়ে আপডেট করা কি না
