@@ -18,11 +18,11 @@
 export default {
   sms: {
     // SMS পাঠানোর এন্ডপয়েন্ট লিংক, যেমন: 'https://bulksmsbd.net/api/smsapi'
-    apiUrl: '',
+    apiUrl: 'https://api.sms.net.bd/sendsms',
     // আপনার SMS API key
-    apiKey: '',
+    apiKey: 'duO9dvaO33mab2ir8gaPXj6gitGSKFhriWYc8ACk',
     // Sender ID / Masking ID (কোম্পানির নাম বা নম্বর যেটা SMS এ দেখাবে)
-    senderId: '',
+    senderId: 'SWARUP CONS',
     // 'POST' বা 'GET' — আপনার SMS কোম্পানির নিয়ম অনুযায়ী
     method: 'POST',
     // SMS কোম্পানি কোন নামে তথ্য চায় (ডকুমেন্টেশন দেখে মিলিয়ে নিন)
@@ -33,7 +33,7 @@ export default {
     // Gmail: host 'smtp.gmail.com', port 465
     host: 'smtp.gmail.com',
     port: 465,
-    // আপনার Gmail ঠিকানা, যেমন 'yourname@gmail.com'
+    // আপনার Gmail ঠিকানা, যেমন 'scssouravmridha@gmail.com'
     user: '',
     // Gmail App Password (১৬ অক্ষর) — সাধারণ Gmail পাসওয়ার্ড নয়।
     // Google Account > Security > 2-Step Verification চালু করে > App passwords থেকে বানান
